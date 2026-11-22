@@ -1,0 +1,66 @@
+name: Build and release
+
+# Every push to main builds a signed APK and publishes it as the latest GitHub
+# Release (tag b<run number>). The app's updater reads that release.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      BUILD_NUMBER: ${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # tags + history for release notes
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Install Android SDK platform
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37.2" "build-tools;37.0.0" > /dev/null
+
+      - name: Restore signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.SIGNING_KEYSTORE_B64 }}
+        run: echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+
+      - name: Build release APK
+        env:
+          SIGNING_KEYSTORE_PATH: ${{ runner.temp }}/release.jks
+          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+        run: ./gradlew assembleRelease --console=plain
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          APK="metronome-killer-b${BUILD_NUMBER}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$APK"
+          PREV=$(git describe --tags --abbrev=0 --match 'b*' 2>/dev/null || true)
+          if [ -n "$PREV" ]; then
+            NOTES=$(git log --no-merges --pretty='- %s' "$PREV..HEAD")
+          else
+            NOTES=$(git log --no-merges --pretty='- %s' -20)
+          fi
+          gh release create "b${BUILD_NUMBER}" "$APK" \
+            --title "Build ${BUILD_NUMBER} (0.1.${BUILD_NUMBER})" \
+            --notes "$NOTES" \
+            --target "$GITHUB_SHA" \
+            --latest
