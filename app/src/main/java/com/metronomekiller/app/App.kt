@@ -19,6 +19,8 @@ class App : Application() {
         private set
     lateinit var songs: SongLibrary
         private set
+    lateinit var setlists: com.metronomekiller.app.setlists.SetlistStore
+        private set
     lateinit var practice: com.metronomekiller.app.practice.PracticeController
         private set
 
@@ -29,6 +31,7 @@ class App : Application() {
         metronome = MetronomeController(this, prefs)
         songs = SongLibrary(this)
         practice = com.metronomekiller.app.practice.PracticeController(this, metronome)
+        setlists = com.metronomekiller.app.setlists.SetlistStore(java.io.File(filesDir, "setlists.json"))
     }
 
     companion object {

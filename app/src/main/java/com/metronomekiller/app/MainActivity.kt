@@ -205,6 +205,7 @@ class MainActivity : ComponentActivity() {
             )
         }
         val snackbar = remember { SnackbarHostState() }
+        val setlists = App.from(this).setlists
         val scope = rememberCoroutineScope()
         val say: (String) -> Unit = { msg -> scope.launch { snackbar.showSnackbar(msg) } }
 
@@ -255,6 +256,34 @@ class MainActivity : ComponentActivity() {
             },
         ) { padding ->
             Column(Modifier.fillMaxSize().padding(padding)) {
+                // LEARN: playing an item of a setlist loads it where it belongs: saved
+                // metronome settings go to the Metronome tab, songs open on the Songs tab.
+                val playSetItem: (String, Int) -> Unit = { listId, index ->
+                    setlists.get(listId)?.items?.getOrNull(index)?.let { item ->
+                        setlists.setActive(listId, index)
+                        when (item) {
+                            is com.metronomekiller.app.setlists.SetItem.Preset -> {
+                                metronome.restore(item.settings); openSong = null; tab = Tab.METRONOME
+                            }
+                            is com.metronomekiller.app.setlists.SetItem.Song -> {
+                                val s = App.from(this@MainActivity).songs.song(item.songId)
+                                if (s?.map != null) { metronome.stop(); openSong = s.id; tab = Tab.SONGS }
+                                else say(if (s == null) "That song was removed from your library" else "That song is still being analysed")
+                            }
+                        }
+                    }
+                }
+                val active by setlists.active.collectAsStateWithLifecycle()
+                val lists by setlists.lists.collectAsStateWithLifecycle()
+                val activeList = active?.let { (id, _) -> lists.firstOrNull { it.id == id } }
+                if (activeList != null && screen == Screen.MAIN && (tab == Tab.METRONOME || tab == Tab.SONGS)) {
+                    com.metronomekiller.app.setlists.SetlistStrip(
+                        activeList, active!!.second,
+                        onPrev = { playSetItem(activeList.id, active!!.second - 1) },
+                        onNext = { playSetItem(activeList.id, active!!.second + 1) },
+                        onClose = { setlists.setActive(null) },
+                    )
+                }
                 if (screen == Screen.CALIBRATION) {
                     CalibrationScreen(metronome, onBack = { screen = Screen.MAIN })
                 } else when (tab) {
@@ -275,11 +304,9 @@ class MainActivity : ComponentActivity() {
                     Tab.PRACTICE -> com.metronomekiller.app.practice.PracticeScreen(
                         App.from(this@MainActivity).practice, metronome, onPlay = askNotifications,
                     )
-                    Tab.SETLISTS -> EmptyState(
-                        "Build a setlist",
-                        "Save tempos and songs in the order you play them.",
-                        "New setlist",
-                    ) { say("Setlists are coming in a later build") }
+                    Tab.SETLISTS -> com.metronomekiller.app.setlists.SetlistsScreen(
+                        setlists, App.from(this@MainActivity).songs, metronome, onPlay = playSetItem,
+                    )
                 }
             }
         }
