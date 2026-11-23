@@ -61,6 +61,7 @@ fun SettingsScreen(
     val flash by controller.prefs.flash.collectAsStateWithLifecycle()
     val vibrate by controller.prefs.vibrate.collectAsStateWithLifecycle()
     val accentsOnly by controller.prefs.flashAccentsOnly.collectAsStateWithLifecycle()
+    val hapticTicks by controller.prefs.hapticTicks.collectAsStateWithLifecycle()
     val volume by controller.prefs.volume.collectAsStateWithLifecycle()
     val display by controller.prefs.bpmDisplay.collectAsStateWithLifecycle()
     val colors by controller.prefs.colors.collectAsStateWithLifecycle()
@@ -114,6 +115,7 @@ fun SettingsScreen(
         Toggle("Flash the screen", "Useful on loud stages or with earplugs", flash, controller.prefs::setFlash)
         if (flash) Toggle("Accents only", "Flash just on accented beats", accentsOnly, controller.prefs::setFlashAccentsOnly)
         Toggle("Vibrate", "Feel the beat, accents are stronger", vibrate, controller.prefs::setVibrate)
+        Toggle("Haptic ticks", "A small click per step when turning the knob or sliders", hapticTicks, controller.prefs::setHapticTicks)
         Item("Audio sync", "${route.label} · ${controller.prefs.latencyMs(route.key)} ms. Line up visuals with Bluetooth delay", onOpenCalibration)
 
         HorizontalDivider(Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)

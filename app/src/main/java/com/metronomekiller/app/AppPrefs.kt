@@ -47,6 +47,11 @@ class AppPrefs(context: Context) {
     val colors: StateFlow<AppColors> = _colors
     fun setColors(c: AppColors) { _colors.value = c; prefs.edit { putString("colors", c.name) } }
 
+    /** Small vibration per BPM step on the knob, sliders and beat blocks. */
+    private val _hapticTicks = MutableStateFlow(prefs.getBoolean("haptic_ticks", true))
+    val hapticTicks: StateFlow<Boolean> = _hapticTicks
+    fun setHapticTicks(on: Boolean) { _hapticTicks.value = on; prefs.edit { putBoolean("haptic_ticks", on) } }
+
     private val _vibrate = MutableStateFlow(prefs.getBoolean("vibrate", false))
     val vibrate: StateFlow<Boolean> = _vibrate
     fun setVibrate(on: Boolean) { _vibrate.value = on; prefs.edit { putBoolean("vibrate", on) } }
