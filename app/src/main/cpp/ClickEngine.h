@@ -24,7 +24,8 @@
 #include <vector>
 
 // Beat states, must match Kotlin BeatState ordinals.
-enum BeatState : int32_t { kAccent = 0, kNormal = 1, kMute = 2 };
+// kStrong (3 filled segments in the UI) is the accent sound played louder.
+enum BeatState : int32_t { kAccent = 0, kNormal = 1, kMute = 2, kStrong = 3 };
 
 constexpr int kMaxBeats = 16;
 constexpr int kRingSize = 128;
@@ -114,6 +115,7 @@ private:
     int64_t seq_ = 0;
     const std::vector<float>* voice_ = nullptr;
     size_t voicePos_ = 0;
+    float voiceGain_ = 1.0f;
 
     Event ring_[kRingSize];
     std::atomic<int64_t> ringCount_{0};

@@ -35,14 +35,14 @@ class AppPrefs(context: Context) {
 
     /** Which tempo display the metronome screen uses (see BpmDisplay). */
     private val _bpmDisplay = MutableStateFlow(
-        runCatching { BpmDisplay.valueOf(prefs.getString("bpm_display", null) ?: "") }.getOrDefault(BpmDisplay.NUMBER)
+        runCatching { BpmDisplay.valueOf(prefs.getString("bpm_display", null) ?: "") }.getOrDefault(BpmDisplay.KNOB)
     )
     val bpmDisplay: StateFlow<BpmDisplay> = _bpmDisplay
     fun setBpmDisplay(d: BpmDisplay) { _bpmDisplay.value = d; prefs.edit { putString("bpm_display", d.name) } }
 
-    /** Colour scheme (see AppColors). Graphite is the default. */
+    /** Colour scheme (see AppColors). Studio is the default. */
     private val _colors = MutableStateFlow(
-        runCatching { AppColors.valueOf(prefs.getString("colors", null) ?: "") }.getOrDefault(AppColors.GRAPHITE)
+        runCatching { AppColors.valueOf(prefs.getString("colors", null) ?: "") }.getOrDefault(AppColors.STUDIO)
     )
     val colors: StateFlow<AppColors> = _colors
     fun setColors(c: AppColors) { _colors.value = c; prefs.edit { putString("colors", c.name) } }

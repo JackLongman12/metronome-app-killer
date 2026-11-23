@@ -7,7 +7,19 @@ package com.metronomekiller.app.engine
  * value's position (0, 1, 2...). We send ordinals to C++, so the ORDER here must
  * match the C++ side (BeatState in ClickEngine.h, buildAll() in ClickEngine.cpp).
  */
-enum class BeatState { ACCENT, NORMAL, MUTE }
+/**
+ * How loud a beat is. The UI shows it as 0–3 filled segments (Soundbrenner-style).
+ * New values go at the END so existing ordinals (sent to C++) stay the same.
+ */
+enum class BeatState(val level: Int) {
+    ACCENT(2), NORMAL(1), MUTE(0), STRONG(3);
+
+    val isAccent: Boolean get() = this == ACCENT || this == STRONG
+
+    companion object {
+        fun ofLevel(level: Int): BeatState = entries.first { it.level == level.coerceIn(0, 3) }
+    }
+}
 
 enum class ClickSound(val label: String) {
     CLICK("Click"),

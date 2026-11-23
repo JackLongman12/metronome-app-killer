@@ -28,6 +28,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.animation.core.tween
+import kotlinx.coroutines.delay
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -62,8 +66,9 @@ import kotlin.math.sin
 
 /** The four ways to show and change the tempo (chosen in Settings → Appearance). */
 enum class BpmDisplay(val label: String, val description: String) {
+    KNOB("Rotary knob", "Turn the big knob, like a real metronome"),
     NUMBER("Number", "Big number with a slider"),
-    DIAL("Tempo dial", "Turn the ring with your thumb"),
+    DIAL("Tempo ring", "A ring that fills up with the tempo"),
     RING("Beat ring", "Beats around a circle, tap one to change it"),
     RULER("Ruler", "Fling the ruler for big jumps"),
 }
@@ -87,6 +92,7 @@ fun TempoDisplay(
     onEditBpm: () -> Unit,
 ) {
     when (style) {
+        BpmDisplay.KNOB -> KnobDisplay(state, controller, onEditBpm)
         BpmDisplay.NUMBER -> NumberDisplay(state, controller, onEditBpm)
         BpmDisplay.DIAL -> DialDisplay(state, controller, onEditBpm)
         BpmDisplay.RING -> RingDisplay(state, currentBeat, controller, onEditBpm)
@@ -109,12 +115,31 @@ private fun BigNumber(state: MetronomeState, onEditBpm: () -> Unit, size: Int = 
     }
 }
 
+/**
+ * Sets the BPM and gives a light haptic tick whenever the number actually
+ * changes, so every control feels like it clicks into place (Soundbrenner-style).
+ */
+@Composable
+fun rememberBpmSetter(controller: MetronomeController): (Int) -> Unit {
+    val haptics = LocalHapticFeedback.current
+    return remember(controller) {
+        { bpm: Int ->
+            val b = bpm.coerceIn(MIN, MAX)
+            if (b != controller.state.value.bpm) {
+                controller.setBpm(b)
+                haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+            }
+        }
+    }
+}
+
 @Composable
 private fun PlusMinus(controller: MetronomeController, content: @Composable () -> Unit = { Spacer(Modifier.width(48.dp)) }) {
+    val set = rememberBpmSetter(controller)
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center, modifier = Modifier.fillMaxWidth()) {
-        OutlinedIconButton(onClick = { controller.nudge(-1) }) { Icon(AppIcons.Remove, "Slower") }
+        OutlinedIconButton(onClick = { set(controller.state.value.bpm - 1) }) { Icon(AppIcons.Remove, "Slower") }
         content()
-        OutlinedIconButton(onClick = { controller.nudge(1) }) { Icon(AppIcons.Add, "Faster") }
+        OutlinedIconButton(onClick = { set(controller.state.value.bpm + 1) }) { Icon(AppIcons.Add, "Faster") }
     }
 }
 
@@ -126,12 +151,119 @@ private fun NumberDisplay(state: MetronomeState, controller: MetronomeController
         BigNumber(state, onEditBpm)
         Spacer(Modifier.height(16.dp))
         PlusMinus(controller) {
+            val set = rememberBpmSetter(controller)
             Slider(
                 value = state.bpm.toFloat(),
-                onValueChange = { controller.setBpm(it.roundToInt()) },
+                onValueChange = { set(it.roundToInt()) },
                 valueRange = MIN.toFloat()..MAX.toFloat(),
                 modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
             )
+        }
+    }
+}
+
+// ── Rotary knob (default) ──────────────────────────────────────────────────
+
+/**
+ * A big rotary knob with tick marks, like a hardware metronome. Turn it with your
+ * thumb: every 6 degrees is 1 BPM (60 BPM per full turn) with a haptic tick per
+ * step. The grip dot on the knob turns with the tempo, so you see it move.
+ */
+@Composable
+private fun KnobDisplay(state: MetronomeState, controller: MetronomeController, onEditBpm: () -> Unit) {
+    val c = MaterialTheme.colorScheme
+    val haptics = LocalHapticFeedback.current
+    // Which way the knob was last turned (-1 slower, +1 faster) and how lit the
+    // matching arrow is (1 = fully lit, fades to 0 shortly after you stop).
+    var turnDir by remember { mutableIntStateOf(0) }
+    var pulse by remember { mutableIntStateOf(0) }
+    val lit = remember { Animatable(0f) }
+    LaunchedEffect(pulse) {
+        if (pulse == 0) return@LaunchedEffect
+        lit.snapTo(1f)
+        delay(250)
+        lit.animateTo(0f, tween(450))
+    }
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(
+            Modifier.clip(RoundedCornerShape(12.dp)).clickable(onClick = onEditBpm).padding(horizontal = 16.dp, vertical = 4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(MetronomeController.tempoName(state.bpm), style = MaterialTheme.typography.titleMedium, color = c.onSurfaceVariant)
+            Text("${state.bpm}", fontSize = 56.sp, fontWeight = FontWeight.Bold, lineHeight = 56.sp)
+            Text("BPM", style = MaterialTheme.typography.titleMedium, color = c.onSurfaceVariant)
+        }
+        Box(
+            Modifier.size(280.dp).pointerInput(Unit) {
+                val center = Offset(size.width / 2f, size.height / 2f)
+                var accum = 0f
+                var lastAngle = 0f
+                detectDragGestures(onDragStart = { p -> lastAngle = angleOf(p, center); accum = 0f }) { change, _ ->
+                    val a = angleOf(change.position, center)
+                    var d = a - lastAngle
+                    if (d > 180f) d -= 360f
+                    if (d < -180f) d += 360f // crossing the 180 degree line
+                    lastAngle = a
+                    accum += d
+                    val steps = (accum / 6f).toInt()
+                    if (steps != 0) {
+                        accum -= steps * 6f
+                        controller.nudge(steps)
+                        haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                        turnDir = if (steps > 0) 1 else -1
+                        pulse++
+                    }
+                    change.consume()
+                }
+            },
+            contentAlignment = Alignment.Center,
+        ) {
+            Canvas(Modifier.size(280.dp)) {
+                val leftColor = if (turnDir < 0) lerp(c.outline, c.primary, lit.value) else c.outline
+                val rightColor = if (turnDir > 0) lerp(c.outline, c.primary, lit.value) else c.outline
+                val outerR = size.minDimension / 2 - 22.dp.toPx()
+                // curved arrows above the knob: turn left / turn right
+                val arcR = outerR + 14.dp.toPx()
+                val arcTl = Offset(center.x - arcR, center.y - arcR)
+                val arrowStroke = Stroke(2.dp.toPx())
+                drawArc(leftColor, 200f, 40f, false, arcTl, Size(arcR * 2, arcR * 2), style = arrowStroke)
+                drawArc(rightColor, 300f, 40f, false, arcTl, Size(arcR * 2, arcR * 2), style = arrowStroke)
+                fun arrowHead(deg: Float, dir: Float, color: androidx.compose.ui.graphics.Color) {
+                    val r = Math.toRadians(deg.toDouble())
+                    val tip = Offset(center.x + arcR * cos(r).toFloat(), center.y + arcR * sin(r).toFloat())
+                    val back = Math.toRadians((deg - dir * 6f).toDouble())
+                    val l = 8.dp.toPx()
+                    val b1 = Offset(center.x + (arcR - l) * cos(back).toFloat(), center.y + (arcR - l) * sin(back).toFloat())
+                    val b2 = Offset(center.x + (arcR + l) * cos(back).toFloat(), center.y + (arcR + l) * sin(back).toFloat())
+                    drawLine(color, tip, b1, 2.dp.toPx())
+                    drawLine(color, tip, b2, 2.dp.toPx())
+                }
+                arrowHead(200f, -1f, leftColor)
+                arrowHead(340f, 1f, rightColor)
+                // knob body: dark rim, then the face
+                drawCircle(c.scrim.copy(alpha = 0.55f), outerR)
+                drawCircle(c.surfaceVariant, outerR - 10.dp.toPx())
+                // tick marks around the face
+                val tickOuter = outerR - 16.dp.toPx()
+                for (i in 0 until 60) {
+                    val r = Math.toRadians(i * 6.0)
+                    val len = (if (i % 5 == 0) 10 else 6).dp.toPx()
+                    drawLine(
+                        c.outline,
+                        Offset(center.x + tickOuter * cos(r).toFloat(), center.y + tickOuter * sin(r).toFloat()),
+                        Offset(center.x + (tickOuter - len) * cos(r).toFloat(), center.y + (tickOuter - len) * sin(r).toFloat()),
+                        1.5.dp.toPx(),
+                    )
+                }
+                drawCircle(c.surface, tickOuter - 14.dp.toPx())
+                // the grip dot turns with the tempo (6 degrees per BPM, same as the gesture)
+                val dotAngle = Math.toRadians(state.bpm * 6.0)
+                val dotR = tickOuter - 36.dp.toPx()
+                drawCircle(
+                    c.surfaceVariant, 10.dp.toPx(),
+                    Offset(center.x + dotR * cos(dotAngle).toFloat(), center.y + dotR * sin(dotAngle).toFloat()),
+                )
+            }
         }
     }
 }
@@ -237,8 +369,9 @@ private fun RingDisplay(state: MetronomeState, current: Int, controller: Metrono
                 dotPositions.value = pts
                 beats.forEachIndexed { i, s ->
                     val p = pts[i]
-                    val rad = (if (s == BeatState.ACCENT) 15 else 11).dp.toPx() * if (beats.size > 10) 0.75f else 1f
+                    val rad = (if (s.isAccent) 15 else 11).dp.toPx() * if (beats.size > 10) 0.75f else 1f
                     when (s) {
+                        BeatState.STRONG -> drawCircle(c.primary, rad + 3.dp.toPx(), p)
                         BeatState.ACCENT -> drawCircle(c.primary, rad, p)
                         BeatState.NORMAL -> drawCircle(c.primary.copy(alpha = 0.45f), rad, p)
                         BeatState.MUTE -> drawCircle(c.outline, rad, p, style = Stroke(1.5.dp.toPx()))
@@ -255,9 +388,10 @@ private fun RingDisplay(state: MetronomeState, current: Int, controller: Metrono
         )
         Spacer(Modifier.height(8.dp))
         PlusMinus(controller) {
+            val set = rememberBpmSetter(controller)
             Slider(
                 value = state.bpm.toFloat(),
-                onValueChange = { controller.setBpm(it.roundToInt()) },
+                onValueChange = { set(it.roundToInt()) },
                 valueRange = MIN.toFloat()..MAX.toFloat(),
                 modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
             )

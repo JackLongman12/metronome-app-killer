@@ -1,6 +1,6 @@
 package com.metronomekiller.app.metronome
 
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -10,22 +10,17 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
@@ -35,15 +30,15 @@ import com.metronomekiller.app.engine.BeatState
 import kotlin.math.abs
 
 /**
- * The row of beats you tap to set accents.
+ * The row of beats, Soundbrenner-style: each beat is a block of three stacked
+ * segments, filled from the bottom. 0 filled = mute, 1 = normal, 2 = accent,
+ * 3 = strong accent.
  *
- * Design (Soundbrenner-style, from user feedback on build 1):
- * - Every block is the SAME size, so tap targets never move while it's clicking.
- * - The state is how FULL a block is: full = accent, half = normal, empty = mute.
- * - The beat that's playing gets a dot underneath and a darker outline. That never
- *   changes the fill, so you can always see what you just set.
- * - Tap cycles accent → normal → mute. Swipe up/down on a block to raise/lower it.
- * - Each change gives a small vibration and the fill animates, so you know it worked.
+ * - Blocks never change size, so tap targets don't move while it's clicking.
+ * - The playing beat's filled segments turn the accent colour; the LEVEL is
+ *   still readable, so you can see what you just set even mid-click.
+ * - Tap = one level up (wraps from strong to mute). Swipe up/down = louder/quieter.
+ * - Every change gives a haptic tick.
  */
 @Composable
 fun BeatEditor(
@@ -54,75 +49,52 @@ fun BeatEditor(
     onSet: (Int, BeatState) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(if (beats.size > 8) 4.dp else 8.dp)) {
+    val gap = when {
+        beats.size > 10 -> 4.dp
+        beats.size > 6 -> 8.dp
+        else -> 18.dp
+    }
+    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(gap)) {
         beats.forEachIndexed { i, state ->
             // A shortened last beat (decimal time signatures like 3.5/4) is drawn narrower.
             val w = if (i == beats.lastIndex) lastFraction.coerceIn(0.25f, 1f) else 1f
-            Column(Modifier.weight(w), horizontalAlignment = Alignment.CenterHorizontally) {
-                BeatBlock(
-                    number = i + 1,
-                    state = state,
-                    playing = i == current,
-                    onTap = { onCycle(i) },
-                    onSwipe = { up -> onSet(i, if (up) state.louder() else state.quieter()) },
-                )
-                Spacer(Modifier.height(8.dp))
-                Box(
-                    Modifier.size(6.dp).clip(CircleShape).background(
-                        if (i == current) MaterialTheme.colorScheme.onSurface
-                        else MaterialTheme.colorScheme.outlineVariant
-                    )
-                )
-            }
+            BeatBlock(
+                state = state,
+                playing = i == current,
+                onTap = { onCycle(i) },
+                onSwipe = { up -> onSet(i, BeatState.ofLevel(state.level + if (up) 1 else -1)) },
+                modifier = Modifier.weight(w),
+            )
         }
     }
 }
 
-private fun BeatState.louder() = when (this) {
-    BeatState.MUTE -> BeatState.NORMAL
-    else -> BeatState.ACCENT
-}
-
-private fun BeatState.quieter() = when (this) {
-    BeatState.ACCENT -> BeatState.NORMAL
-    else -> BeatState.MUTE
-}
-
 @Composable
 private fun BeatBlock(
-    number: Int,
     state: BeatState,
     playing: Boolean,
     onTap: () -> Unit,
     onSwipe: (up: Boolean) -> Unit,
+    modifier: Modifier,
 ) {
     val c = MaterialTheme.colorScheme
     val haptics = LocalHapticFeedback.current
-    // LEARN: animate*AsState smoothly moves a value toward its new target whenever
-    // the target changes — here the fill height, so a change is easy to see.
-    val level by animateFloatAsState(
-        targetValue = when (state) { BeatState.ACCENT -> 1f; BeatState.NORMAL -> 0.5f; BeatState.MUTE -> 0f },
-        animationSpec = tween(140),
-        label = "beatLevel",
-    )
-    // LEARN: pointerInput's gesture code runs once and keeps going; without
+    // LEARN: pointerInput's gesture loop starts once and keeps running; without
     // rememberUpdatedState it would keep calling the callbacks from its first
-    // composition (with stale beat states).
+    // composition (with a stale beat state).
     val tap by rememberUpdatedState(onTap)
     val swipe by rememberUpdatedState(onSwipe)
-    val shape = RoundedCornerShape(10.dp)
+    val fill by animateColorAsState(if (playing) c.primary else c.scrim, tween(60), label = "beatFill")
+    val outer = RoundedCornerShape(10.dp)
 
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .height(96.dp)
-            .clip(shape)
-            .background(c.surfaceVariant)
-            .border(if (playing) 2.dp else 1.dp, if (playing) c.onSurface else c.outline, shape)
+    Column(
+        modifier
+            .height(64.dp)
+            .clip(outer)
+            .border(2.dp, c.scrim, outer)
             .pointerInput(Unit) {
-                val threshold = 20.dp.toPx()
-                // One gesture = finger down … finger up. If it travels far enough
-                // vertically it's a swipe, otherwise it's a tap.
+                val threshold = 18.dp.toPx()
+                // One gesture = finger down … finger up. Far enough vertically = swipe, else tap.
                 awaitEachGesture {
                     awaitFirstDown()
                     var dy = 0f
@@ -146,20 +118,18 @@ private fun BeatBlock(
                         haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
                     }
                 }
-            },
+            }
     ) {
-        Box(
-            Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .fillMaxHeight(level)
-                .background(if (state == BeatState.ACCENT) c.primary else c.primary.copy(alpha = 0.45f))
-        )
-        Text(
-            "$number",
-            style = MaterialTheme.typography.labelMedium,
-            color = if (state == BeatState.ACCENT) c.onPrimary else c.onSurfaceVariant,
-            modifier = Modifier.align(Alignment.TopCenter).padding(top = 6.dp),
-        )
+        // Top segment = level 3, bottom = level 1.
+        for (seg in 3 downTo 1) {
+            Box(
+                Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(horizontal = 0.dp)
+                    .background(if (state.level >= seg) fill else Color.Transparent)
+            )
+            if (seg > 1) Box(Modifier.fillMaxWidth().height(2.dp).background(c.scrim))
+        }
     }
 }

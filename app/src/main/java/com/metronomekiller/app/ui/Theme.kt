@@ -46,6 +46,9 @@ private fun light(
     secondaryContainer = Color(variant), onSecondaryContainer = Color(text),
 )
 
+// Studio: warm dark grey with a teal accent, like a piece of studio hardware.
+private val StudioScheme = dark(0xFF2A2A2C, 0xFF333335, 0xFF2F2F31, 0xFFF2F2F2, 0xFF9A9A9E,
+    0xFF1FB8A6, 0xFF00201C, 0xFF17413C, 0xFF5A5A5E, 0xFF3A3A3D)
 private val GraphiteScheme = dark(0xFF0F1115, 0xFF16191E, 0xFF1B1E24, 0xFFE8EAED, 0xFF9AA0A6,
     0xFF4C8DFF, 0xFF001A40, 0xFF22324F, 0xFF3A3F47, 0xFF262A31)
 private val OledScheme = dark(0xFF000000, 0xFF0A0A0A, 0xFF141414, 0xFFF2F2F2, 0xFF8A8A8A,
@@ -61,6 +64,7 @@ private val WarmDark = dark(0xFF111214, 0xFF1A1B1E, 0xFF26272A, 0xFFEDEDEA, 0xFF
 
 /** The selectable colour schemes (Settings → Appearance). [swatch] is for the picker. */
 enum class AppColors(val label: String, val swatchBg: Color, val swatchAccent: Color) {
+    STUDIO("Studio grey and teal", Color(0xFF2A2A2C), Color(0xFF1FB8A6)),
     GRAPHITE("Graphite and blue", Color(0xFF0F1115), Color(0xFF4C8DFF)),
     OLED("OLED black and lime", Color(0xFF000000), Color(0xFFB8F35A)),
     PAPER("Paper and ink green", Color(0xFFF4F2ED), Color(0xFF2F6B57)),
@@ -77,6 +81,7 @@ enum class AppColors(val label: String, val swatchBg: Color, val swatchAccent: C
 
     @Composable
     fun scheme(): ColorScheme = when (this) {
+        STUDIO -> StudioScheme
         GRAPHITE -> GraphiteScheme
         OLED -> OledScheme
         PAPER -> PaperScheme

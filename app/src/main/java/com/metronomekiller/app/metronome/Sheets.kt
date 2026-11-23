@@ -260,11 +260,11 @@ private fun PatternPreview(pattern: List<BeatState>, lastFraction: Double) {
         verticalAlignment = Alignment.Bottom,
     ) {
         pattern.forEachIndexed { i, s ->
-            val h = when (s) { BeatState.ACCENT -> 28.dp; BeatState.NORMAL -> 16.dp; BeatState.MUTE -> 4.dp }
+            val h = (4 + 8 * s.level).dp
             val w = if (i == pattern.lastIndex) lastFraction.toFloat() else 1f
             Box(
                 Modifier.weight(w).height(h).clip(RoundedCornerShape(4.dp)).background(
-                    if (s == BeatState.ACCENT) MaterialTheme.colorScheme.primary
+                    if (s.isAccent) MaterialTheme.colorScheme.primary
                     else MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
                 )
             )

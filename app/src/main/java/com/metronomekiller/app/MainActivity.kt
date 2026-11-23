@@ -69,9 +69,10 @@ private enum class Tab(val label: String, val icon: ImageVector) {
     SONGS("Songs", AppIcons.Music),
     PRACTICE("Practice", AppIcons.Target),
     SETLISTS("Setlists", AppIcons.List),
+    SETTINGS("Settings", AppIcons.Tune),
 }
 
-private enum class Screen { MAIN, SETTINGS, CALIBRATION }
+private enum class Screen { MAIN, CALIBRATION }
 
 /**
  * The app's only Activity (a "window" Android gives us). All screens are
@@ -148,7 +149,7 @@ class MainActivity : ComponentActivity() {
         }
 
         BackHandler(enabled = screen != Screen.MAIN) {
-            screen = if (screen == Screen.CALIBRATION) Screen.SETTINGS else Screen.MAIN
+            screen = Screen.MAIN
         }
 
         // Full-screen flash on each beat (optional). A flat tint that fades fast — no glow.
@@ -159,8 +160,8 @@ class MainActivity : ComponentActivity() {
             if (!flashOn) return@LaunchedEffect
             metronome.beatEvents.collect { e ->
                 if (e.state == BeatState.MUTE) return@collect
-                if (prefs.flashAccentsOnly.value && e.state != BeatState.ACCENT) return@collect
-                flashAccent = e.state == BeatState.ACCENT
+                if (prefs.flashAccentsOnly.value && !e.state.isAccent) return@collect
+                flashAccent = e.state.isAccent
                 launch {
                     flashAlpha.snapTo(if (flashAccent) 0.35f else 0.14f)
                     flashAlpha.animateTo(0f, tween(160))
@@ -185,14 +186,13 @@ class MainActivity : ComponentActivity() {
             },
         ) { padding ->
             Column(Modifier.fillMaxSize().padding(padding)) {
-                if (screen == Screen.SETTINGS) {
-                    SettingsScreen(updates, metronome, onOpenCalibration = { screen = Screen.CALIBRATION },
-                        onBack = { screen = Screen.MAIN })
-                } else if (screen == Screen.CALIBRATION) {
-                    CalibrationScreen(metronome, onBack = { screen = Screen.SETTINGS })
+                if (screen == Screen.CALIBRATION) {
+                    CalibrationScreen(metronome, onBack = { screen = Screen.MAIN })
                 } else when (tab) {
+                    Tab.SETTINGS -> SettingsScreen(updates, metronome,
+                        onOpenCalibration = { screen = Screen.CALIBRATION }, onBack = null)
                     Tab.METRONOME -> MetronomeScreen(metronome, onTogglePlay = togglePlay,
-                        onOpenSettings = { screen = Screen.SETTINGS }, onComingSoon = say)
+                        onLoadSong = { tab = Tab.SONGS }, onComingSoon = say)
                     Tab.SONGS -> EmptyState(
                         "Add your first song",
                         "Pick a song on your phone, share one from another app, or paste a YouTube, SoundCloud or Spotify link. You'll get a click track that follows its tempo.",

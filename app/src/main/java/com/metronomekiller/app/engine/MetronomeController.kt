@@ -136,14 +136,10 @@ class MetronomeController(private val context: Context, val prefs: AppPrefs) {
         else s.copy(beats = s.beats.toMutableList().also { it[index] = value })
     }
 
-    /** Tap on a beat: accent → normal → mute → accent. */
+    /** Tap on a beat: one level up (normal → accent → strong → mute → normal). */
     fun cycleBeat(index: Int) {
         val cur = _state.value.beats.getOrNull(index) ?: return
-        setBeat(index, when (cur) {
-            BeatState.ACCENT -> BeatState.NORMAL
-            BeatState.NORMAL -> BeatState.MUTE
-            BeatState.MUTE -> BeatState.ACCENT
-        })
+        setBeat(index, BeatState.ofLevel((cur.level + 1) % 4))
     }
 
     /** Set the time signature; keeps your existing accents unless [pattern] is given. */
@@ -238,7 +234,7 @@ class MetronomeController(private val context: Context, val prefs: AppPrefs) {
                         val state = BeatState.entries[((packed shr 4) and 0xF).toInt()]
                         _currentBeat.value = index
                         _beatEvents.tryEmit(BeatEvent(index, state, seq))
-                        if (prefs.vibrate.value && state != BeatState.MUTE) vibrate(state == BeatState.ACCENT)
+                        if (prefs.vibrate.value && state != BeatState.MUTE) vibrate(state.isAccent)
                     }
                 }
                 delay(4)

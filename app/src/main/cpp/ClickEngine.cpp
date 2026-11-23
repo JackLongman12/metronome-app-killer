@@ -249,6 +249,7 @@ oboe::DataCallbackResult ClickEngine::onAudioReady(oboe::AudioStream* stream, vo
     const int pv = previewSound_.exchange(-1);
     if (pv >= 0 && pv < static_cast<int>(voices_.size())) {
         voice_ = &voices_[pv][0];
+        voiceGain_ = 1.0f;
         voicePos_ = 0;
     }
 
@@ -259,9 +260,12 @@ oboe::DataCallbackResult ClickEngine::onAudioReady(oboe::AudioStream* stream, vo
             if (subPos_ >= sub) subPos_ = 0;
             const int32_t state = beats_[beatIdx_].load();
 
+            const bool accented = state == kAccent || state == kStrong;
             if (state == kMute) voice_ = nullptr;
             else if (subPos_ != 0) voice_ = &voices_[sound][2];
-            else voice_ = &voices_[sound][state == kAccent ? 0 : 1];
+            else voice_ = &voices_[sound][accented ? 0 : 1];
+            // Strong = the accent sound pushed harder into the soft limiter.
+            voiceGain_ = (state == kStrong && subPos_ == 0) ? 1.45f : 1.0f;
             voicePos_ = 0;
 
             if (subPos_ == 0) {
@@ -291,7 +295,7 @@ oboe::DataCallbackResult ClickEngine::onAudioReady(oboe::AudioStream* stream, vo
             }
         }
         float v = 0.0f;
-        if (voice_ && voicePos_ < voice_->size()) v = (*voice_)[voicePos_++] * vol;
+        if (voice_ && voicePos_ < voice_->size()) v = (*voice_)[voicePos_++] * vol * voiceGain_;
         // Soft limiter: lifts quieter parts (sounds louder overall) and lets the
         // volume go above 100% without harsh digital clipping.
         out[i] = static_cast<float>(std::tanh(1.4 * v) / std::tanh(1.4));

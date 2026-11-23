@@ -5,6 +5,8 @@ import android.net.Uri
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -52,7 +54,7 @@ fun SettingsScreen(
     updates: UpdateViewModel,
     controller: MetronomeController,
     onOpenCalibration: () -> Unit,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)?,
 ) {
     val state by updates.state.collectAsStateWithLifecycle()
     val auto by updates.autoCheck.collectAsStateWithLifecycle()
@@ -67,7 +69,9 @@ fun SettingsScreen(
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(AppIcons.Back, "Back") }
+            // Settings is a bottom-bar tab now, so there's no back arrow there.
+            if (onBack != null) IconButton(onClick = onBack) { Icon(AppIcons.Back, "Back") }
+            else Spacer(Modifier.width(12.dp))
             Text("Settings", style = MaterialTheme.typography.titleLarge)
         }
 
