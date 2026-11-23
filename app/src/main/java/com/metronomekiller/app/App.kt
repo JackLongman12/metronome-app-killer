@@ -28,6 +28,8 @@ class App : Application() {
         super.onCreate()
         CrashLog.install(this)
         prefs = AppPrefs(this)
+        // Recorded click sounds must reach the engine before its audio stream first opens.
+        com.metronomekiller.app.engine.SampleLoader.load(this)
         metronome = MetronomeController(this, prefs)
         songs = SongLibrary(this)
         practice = com.metronomekiller.app.practice.PracticeController(this, metronome)

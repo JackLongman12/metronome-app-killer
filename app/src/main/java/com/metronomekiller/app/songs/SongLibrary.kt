@@ -14,6 +14,7 @@ import com.metronomekiller.app.analysis.TempoMap
 import com.metronomekiller.app.analysis.TempoMapBuilder
 import com.metronomekiller.app.App
 import com.metronomekiller.app.links.Links
+import com.metronomekiller.app.links.Spotify
 import com.metronomekiller.app.links.Songsterr
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -64,6 +65,8 @@ data class Song(
     val tabId: Long? = null,
     /** Your own names for rows in the part-rows view, keyed by the row's first bar (0-based). */
     val rowNames: Map<Int, String> = emptyMap(),
+    /** Length the link reported (Spotify), in seconds: helps find the same recording on YouTube. */
+    val spotifySeconds: Long = 0,
 )
 
 /**
@@ -113,8 +116,10 @@ class SongLibrary(private val context: Context) {
     }
 
     /**
-     * Add a YouTube/SoundCloud video or playlist link. A playlist adds every song
-     * in playlist order, each analysed in turn.
+     * Add a YouTube/SoundCloud video or playlist link, or a Spotify track,
+     * album or playlist. A playlist adds every song in playlist order, each
+     * analysed in turn. Spotify songs are matched to YouTube when they're
+     * downloaded (see analyse), one at a time, so a 50-song playlist adds instantly.
      */
     fun addLink(text: String) {
         val url = Links.findUrl(text) ?: text.trim()
@@ -122,16 +127,17 @@ class SongLibrary(private val context: Context) {
         _linkStatus.value = "Looking up the link…"
         scope.launch {
             try {
-                when (val r = Links.resolve(url)) {
+                val resolved = if (Spotify.isSpotify(url)) Spotify.resolve(url) else Links.resolve(url)
+                when (val r = resolved) {
                     is Links.Resolved.Single -> {
-                        val s = Song(UUID.randomUUID().toString(), r.item.title, r.item.artist, "", System.currentTimeMillis(), link = r.item.url)
+                        val s = Song(UUID.randomUUID().toString(), r.item.title, r.item.artist, "", System.currentTimeMillis(), link = r.item.url, spotifySeconds = r.item.durationSec)
                         _songs.update { listOf(s) + it }
                         save(); analyse(s.id)
                     }
                     is Links.Resolved.Playlist -> {
                         val now = System.currentTimeMillis()
                         val added = r.items.mapIndexed { i, it ->
-                            Song(UUID.randomUUID().toString(), it.title, it.artist, "", now - i, link = it.url, playlist = r.name)
+                            Song(UUID.randomUUID().toString(), it.title, it.artist, "", now - i, link = it.url, playlist = r.name, spotifySeconds = it.durationSec)
                         }
                         _songs.update { added + it }
                         save(); added.forEach { analyse(it.id) }
@@ -278,6 +284,14 @@ class SongLibrary(private val context: Context) {
             queue.withLock {
                 var song = song(id) ?: return@withLock
                 try {
+                    // Spotify songs: find the same recording on YouTube, then carry on as a YouTube link.
+                    if (song.link != null && Spotify.isSpotify(song.link!!)) {
+                        setStatus(id, SongStatus.Working("Finding it on YouTube", 0f))
+                        val yt = Spotify.matchOnYouTube(song.title, song.artist, song.spotifySeconds)
+                        _songs.update { list -> list.map { if (it.id == id) it.copy(link = yt) else it } }
+                        save()
+                        song = song(id) ?: return@withLock
+                    }
                     // Links: download the audio first (once), and look up parts to skip.
                     if (song.link != null && (song.uri.isEmpty() || !File(Uri.parse(song.uri).path ?: "").exists())) {
                         setStatus(id, SongStatus.Working("Downloading audio", 0f))
@@ -380,6 +394,7 @@ class SongLibrary(private val context: Context) {
                 skips = skips ?: emptyList(), offsetMs = o.optInt("offsetMs", 0),
                 tabInfo = o.optString("tabInfo").ifEmpty { null }, usingTab = o.optBoolean("usingTab"),
                 tabId = o.optLong("tabId", 0L).takeIf { it > 0 },
+                spotifySeconds = o.optLong("spotifySeconds", 0L),
                 hasEdit = File(dir, "$id.edit.json").exists(), usingEdit = o.optBoolean("usingEdit"),
                 rowNames = o.optJSONObject("rowNames")?.let { r -> r.keys().asSequence().associate { k -> k.toInt() to r.getString(k) } } ?: emptyMap())
         }
@@ -391,7 +406,7 @@ class SongLibrary(private val context: Context) {
                 .put("uri", it.uri).put("addedAt", it.addedAt)
                 .put("offsetMs", it.offsetMs)
                 .put("tabInfo", it.tabInfo ?: "").put("usingTab", it.usingTab)
-                .put("tabId", it.tabId ?: 0L).put("usingEdit", it.usingEdit)
+                .put("tabId", it.tabId ?: 0L).put("spotifySeconds", it.spotifySeconds).put("usingEdit", it.usingEdit)
                 .put("rowNames", JSONObject().apply { it.rowNames.forEach { (k, v) -> put(k.toString(), v) } })
                 .put("link", it.link ?: "").put("playlist", it.playlist ?: "")
                 .put("skips", JSONArray(it.skips.map { (a, b) -> JSONArray(listOf(a, b)) }))

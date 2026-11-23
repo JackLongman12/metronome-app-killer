@@ -32,6 +32,15 @@ JNIEXPORT void JNICALL JNI_FN(nSetClicksEnabled)(JNIEnv*, jobject, jboolean on) 
 JNIEXPORT void JNICALL JNI_FN(nPreview)(JNIEnv*, jobject, jint sound) { engine()->preview(sound); }
 JNIEXPORT void JNICALL JNI_FN(nSetTempo)(JNIEnv*, jobject, jdouble bpm) { engine()->setTempo(bpm); }
 JNIEXPORT void JNICALL JNI_FN(nSetSubdivision)(JNIEnv*, jobject, jint s) { engine()->setSubdivision(s); }
+JNIEXPORT void JNICALL JNI_FN(nSetSample)(JNIEnv* env, jobject, jint slot, jfloatArray data, jint rate) {
+    // LEARN: GetFloatArrayElements gives C++ a pointer to the Kotlin array's numbers
+    // (maybe a copy). Release hands it back; JNI_ABORT = "I didn't change it, no need to copy back".
+    const jsize n = env->GetArrayLength(data);
+    jfloat* p = env->GetFloatArrayElements(data, nullptr);
+    if (!p) return;
+    engine()->setSample(slot, p, n, rate);
+    env->ReleaseFloatArrayElements(data, p, JNI_ABORT);
+}
 JNIEXPORT void JNICALL JNI_FN(nSetSound)(JNIEnv*, jobject, jint s) { engine()->setSound(s); }
 JNIEXPORT void JNICALL JNI_FN(nSetLastBeatFraction)(JNIEnv*, jobject, jdouble f) { engine()->setLastBeatFraction(f); }
 JNIEXPORT void JNICALL JNI_FN(nSetVolume)(JNIEnv*, jobject, jfloat v) { engine()->setVolume(v); }

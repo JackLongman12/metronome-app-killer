@@ -29,6 +29,8 @@ object NativeEngine {
     external fun nSetTempo(bpm: Double)
     external fun nSetSubdivision(perBeat: Int)
     external fun nSetSound(sound: Int)
+    /** Gives the engine one recorded hit (mono samples −1..1 at [rate] Hz). See [SampleLoader]. */
+    external fun nSetSample(slot: Int, data: FloatArray, rate: Int)
     external fun nSetVolume(volume: Float)
     /** Practice: [on] clicking bars then [off] silent bars; [grow] = 1 adds a silent bar each round. 0, 0 = off. */
     external fun nSetGap(on: Int, off: Int, grow: Int)

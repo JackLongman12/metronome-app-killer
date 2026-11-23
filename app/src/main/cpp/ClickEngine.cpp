@@ -82,8 +82,38 @@ Voice cowbell(int sr, double f1, double f2, float gain) {
     });
 }
 
+// Sample slots: must match the order of SAMPLE_FILES in Kotlin (SampleLoader.kt).
+enum {
+    kStickAccent, kStickNormal, kCowbellAccent, kCowbellNormal, kBellAccent, kBellNormal,
+    kHatAccent, kHatNormal, kHatSoft, kKick, kRimAccent, kRimNormal, kSampleCount
+};
+
+// Converts a recorded hit to the output sample rate and normalises its peak to [gain].
+//
+// LEARN — resampling: the recordings are 44.1 kHz but most phones play at 48 kHz.
+// Playing 44.1k samples at 48k would make them 9% shorter and higher-pitched,
+// so we compute each output sample by reading "between" two input samples
+// (linear interpolation). It's the simplest resampler; for short percussive
+// hits it sounds the same as fancy ones.
+Voice resample(const std::vector<float>& in, int inRate, int outRate, float gain) {
+    if (in.empty() || inRate <= 0) return {};
+    const double step = static_cast<double>(inRate) / outRate;
+    const int n = static_cast<int>((in.size() - 1) / step);
+    Voice out(n);
+    float peak = 0.0f;
+    for (int i = 0; i < n; ++i) {
+        const double pos = i * step;
+        const size_t k = static_cast<size_t>(pos);
+        const double frac = pos - k;
+        out[i] = static_cast<float>(in[k] * (1.0 - frac) + in[k + 1] * frac);
+        peak = std::max(peak, std::fabs(out[i]));
+    }
+    if (peak > 0.0f) for (auto& x : out) x *= gain / peak;
+    return out;
+}
+
 // Each sound: {accent, normal, subdivision}. Order must match Kotlin ClickSound.
-std::vector<std::array<Voice, 3>> buildAll(int sr) {
+std::vector<std::array<Voice, 3>> buildAll(int sr, const std::vector<std::vector<float>>& raw, const std::vector<int>& rates) {
     std::vector<std::array<Voice, 3>> v;
     // A 1.5 ms burst of noise on top of a tone gives it a sharp "tick" onset,
     // which makes the click feel immediate even through phone speakers.
@@ -114,6 +144,19 @@ std::vector<std::array<Voice, 3>> buildAll(int sr) {
     v.push_back({hat(sr, 70, 1.0f), hat(sr, 40, 0.8f), hat(sr, 22, 0.45f)});               // Hi-hat
     v.push_back({rim(sr, 1900, 1.0f), rim(sr, 1700, 0.8f), rim(sr, 1700, 0.45f)});         // Rimshot
     v.push_back({kick(sr, 1.0f), hat(sr, 40, 0.8f), hat(sr, 22, 0.45f)});                  // Kick and hat
+
+    // Recorded sounds. If a sample is missing (assets failed to load), fall back
+    // to the plain click so nothing goes silent.
+    auto smp = [&](int slot, float g) {
+        Voice r = slot < static_cast<int>(raw.size()) ? resample(raw[slot], rates[slot], sr, g) : Voice{};
+        return r.empty() ? tone(1320, 22, g) : r;
+    };
+    v.push_back({smp(kStickAccent, 1.0f), smp(kStickNormal, 0.8f), smp(kStickNormal, 0.45f)});        // Side stick
+    v.push_back({smp(kCowbellAccent, 1.0f), smp(kCowbellNormal, 0.8f), smp(kCowbellNormal, 0.45f)});  // Cowbell (recorded)
+    v.push_back({smp(kBellAccent, 1.0f), smp(kBellNormal, 0.8f), smp(kBellNormal, 0.45f)});           // Ride bell
+    v.push_back({smp(kHatAccent, 1.0f), smp(kHatNormal, 0.8f), smp(kHatSoft, 0.45f)});                // Hi-hat (recorded)
+    v.push_back({smp(kKick, 1.0f), smp(kHatNormal, 0.8f), smp(kHatSoft, 0.45f)});                     // Kick and hat (recorded)
+    v.push_back({smp(kRimAccent, 1.0f), smp(kRimNormal, 0.8f), smp(kRimNormal, 0.45f)});              // Rimshot (recorded)
     return v;
 }
 int64_t monotonicNowNs() {
@@ -136,9 +179,21 @@ void ClickEngine::setBeats(const int32_t* states, int count) {
     beatCount_.store(count);
 }
 
-void ClickEngine::buildVoices(int sr) { voices_ = buildAll(sr); }
+void ClickEngine::buildVoices(int sr) { voices_ = buildAll(sr, rawSamples_, rawRates_); }
 
-int ClickEngine::soundCount() { return 8; }
+int ClickEngine::soundCount() { return 14; }
+
+void ClickEngine::setSample(int slot, const float* data, int count, int rate) {
+    if (slot < 0 || slot >= kSampleCount || count <= 1) return;
+    // Same lock as start/stop, so voices are never rebuilt while we write here.
+    std::lock_guard<std::mutex> g(lock_);
+    if (static_cast<int>(rawSamples_.size()) < kSampleCount) {
+        rawSamples_.resize(kSampleCount);
+        rawRates_.resize(kSampleCount, 0);
+    }
+    rawSamples_[slot].assign(data, data + count);
+    rawRates_[slot] = rate;
+}
 
 void ClickEngine::resetTimeline() {
     barInRound_ = -1 - leadBars_.load();

@@ -59,6 +59,10 @@ Release builds in CI are signed with a key stored in repository secrets, so ever
 
 - Beat tracking: [beat_this](https://github.com/CPJKU/beat_this) by CPJKU (MIT), the "Fast" model, and [Masked-Diffusion Beat This](https://github.com/fosfrancesco/md_beat_this) by Foscarin, Korzeniowski and Vogl (research / non-commercial licence), the "Accurate" model. Both are downloaded by the app on first use.
 
+- Recorded click sounds (side stick, cowbell, ride bell, hi-hat, kick, rimshot): the "GMRockKit" drum kit from [Hydrogen](https://github.com/hydrogen-music/hydrogen) (GPL-3.0), trimmed by `tools/sounds/prepare_samples.py`.
+
+- Song names from Spotify links are read from Spotify's public embed player; the audio itself comes from the matching YouTube upload.
+
 - Fonts in the Comic book theme: [Bangers](https://github.com/googlefonts/bangers) and [Comic Neue](https://github.com/crozynski/comicneue), both under the SIL Open Font License 1.1.
 
 ## License

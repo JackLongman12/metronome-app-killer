@@ -50,6 +50,12 @@ public:
     /** Plays one accent hit of [sound] as soon as possible (stream must be running). */
     void preview(int sound) { previewSound_.store(sound); }
     static int soundCount();
+    /**
+     * Hands the engine one recorded drum hit (mono, at [rate] Hz) for sample slot
+     * [slot] (see kSample* in ClickEngine.cpp). Call before start(): voices are
+     * built when the audio stream opens, resampled to the phone's output rate.
+     */
+    void setSample(int slot, const float* data, int count, int rate);
     bool isRunning() const { return running_.load(); }
 
     void setTempo(double bpm) { bpm_.store(bpm); }
@@ -136,7 +142,11 @@ private:
     std::atomic<int> previewSound_{-1};
     std::atomic<bool> rewind_{false};
 
-    // Synthesised voices: [sound][accent, normal, sub]
+    // Recorded hits from the app's assets, at their own sample rate (filled once at app start).
+    std::vector<std::vector<float>> rawSamples_;
+    std::vector<int> rawRates_;
+
+    // Voices: [sound][accent, normal, sub] — synthesised ones first, then recorded ones
     std::vector<std::array<std::vector<float>, 3>> voices_;
 
     // Audio-thread timeline state

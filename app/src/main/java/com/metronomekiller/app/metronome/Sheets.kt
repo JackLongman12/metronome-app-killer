@@ -293,16 +293,28 @@ fun SoundSheet(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp),
             )
-            ClickSound.entries.forEach { s ->
-                Row(
-                    Modifier.fillMaxWidth().clickable { onSelect(s) }.padding(horizontal = 20.dp, vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    if (s == selected) Icon(AppIcons.Check, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
-                    else Spacer(Modifier.width(20.dp))
-                    Spacer(Modifier.width(16.dp))
-                    Text(s.label, modifier = Modifier.weight(1f))
-                    Icon(AppIcons.Volume, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+            // LEARN: a bottom sheet doesn't scroll by itself; verticalScroll lets the
+            // 14 sounds fit on small phones.
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                listOf(false to "Electronic", true to "Recorded drum kit").forEach { (recorded, heading) ->
+                    Text(
+                        heading,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 4.dp),
+                    )
+                    ClickSound.entries.filter { it.recorded == recorded }.forEach { s ->
+                        Row(
+                            Modifier.fillMaxWidth().clickable { onSelect(s) }.padding(horizontal = 20.dp, vertical = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            if (s == selected) Icon(AppIcons.Check, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+                            else Spacer(Modifier.width(20.dp))
+                            Spacer(Modifier.width(16.dp))
+                            Text(s.label, modifier = Modifier.weight(1f))
+                            Icon(AppIcons.Volume, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                        }
+                    }
                 }
             }
         }

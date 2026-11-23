@@ -39,6 +39,9 @@ object Links {
         }
     }
 
+    /** For other link readers (Spotify's YouTube search) that use NewPipe too. */
+    fun ensureInit() = init()
+
     /** Pulls the first http(s) link out of shared text like "Check this out https://youtu.be/..." */
     fun findUrl(text: String): String? = Regex("""https?://\S+""").find(text)?.value?.trimEnd('.', ',', ')')
 

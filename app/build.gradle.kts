@@ -64,7 +64,12 @@ android {
             ndk { abiFilters += listOf("x86_64") }
         }
         release {
-            isMinifyEnabled = false
+            // Shrink the download: R8 removes unused code and shortens names, then
+            // unused resources are dropped. Rules for code that must not be touched
+            // are in proguard-rules.pro.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             // Falls back to the debug key locally so `assembleRelease` still works without secrets.
             signingConfig = if (System.getenv("SIGNING_KEYSTORE_PATH") != null)
                 signingConfigs.getByName("release") else signingConfigs.getByName("debug")

@@ -73,7 +73,7 @@ fun SongsScreen(library: SongLibrary, onOpen: (String) -> Unit) {
             OutlinedTextField(
                 value = link,
                 onValueChange = { link = it; library.clearLinkStatus() },
-                placeholder = { Text("Paste a YouTube, SoundCloud or Songsterr link") },
+                placeholder = { Text("Paste a YouTube, Spotify, SoundCloud or Songsterr link") },
                 singleLine = true,
                 modifier = Modifier.weight(1f),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go),
@@ -102,7 +102,7 @@ fun SongsScreen(library: SongLibrary, onOpen: (String) -> Unit) {
             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
         ) { Text("+ Add a song from your phone") }
         Text(
-            "Playlist links add every song. A Songsterr link adds the song with that exact tab. You can also share a video from the YouTube app to here.",
+            "Playlist and album links add every song (Spotify: up to 50). Spotify songs are found on YouTube by name and length, since Spotify's own audio can't be downloaded. A Songsterr link adds the song with that exact tab. You can also share to here from the YouTube or Spotify app.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 6.dp, bottom = 8.dp),
