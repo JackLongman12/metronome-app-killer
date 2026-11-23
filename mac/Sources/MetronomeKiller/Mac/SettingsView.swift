@@ -62,38 +62,70 @@ private struct MidiSettings: View {
 
     var body: some View {
         Form {
-            Section {
-                Toggle("Send MIDI clock", isOn: $midi.sendClock)
-                Text("Logic, Ableton, GarageBand or a drum machine can follow the metronome's tempo, start and stop. Choose \u{201C}Metronome Killer\u{201D} as the MIDI clock source there.")
-                    .font(.caption).foregroundStyle(.secondary)
-                Toggle("Follow another app's MIDI clock", isOn: $midi.followClock)
-                if midi.followClock {
-                    Text(midi.incomingBpm > 0 ? String(format: "Receiving %.1f BPM (quarter notes)", midi.incomingBpm) : "No clock coming in yet.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                Toggle("Start and stop with the other app", isOn: $midi.followStartStop)
-            } header: { Text("Sync") }
-
-            Section {
-                ForEach(Midi.Action.allCases) { a in
-                    HStack {
-                        Text(a.label)
-                        Spacer()
-                        Text(midi.mappings[a]?.label ?? "—").foregroundStyle(.secondary).monospacedDigit()
-                        Button(midi.learning == a ? "Press it now…" : "Learn") { midi.learn(a) }
-                        if midi.mappings[a] != nil {
-                            Button { midi.forget(a) } label: { Image(systemName: "xmark") }.buttonStyle(.borderless).help("Forget")
-                        }
-                    }
-                }
-                Text("Click Learn, then press the pedal, pad or key. Footswitches that type keys instead of sending MIDI already work: Space starts and stops, Page Down / Page Up step through a setlist.")
-                    .font(.caption).foregroundStyle(.secondary)
-                Text("Listening to \(midi.sourceCount) MIDI source\(midi.sourceCount == 1 ? "" : "s")" + (midi.lastSeen.isEmpty ? "" : " · last: \(midi.lastSeen)"))
-                    .font(.caption).foregroundStyle(.secondary)
-            } header: { Text("Pedals and controllers") }
+            Section(header: Text("Sync")) { MidiSyncRows(midi: midi) }
+            Section(header: Text("Pedals and controllers")) { MidiPedalRows(midi: midi) }
         }
         .formStyle(.grouped)
         .onAppear { midi.start(app) }
+    }
+}
+
+private struct MidiSyncRows: View {
+    @ObservedObject var midi: Midi
+
+    var body: some View {
+        Toggle("Send MIDI clock", isOn: $midi.sendClock)
+        Text(Self.sendHelp).font(.caption).foregroundStyle(.secondary)
+        Toggle("Follow another app's MIDI clock", isOn: $midi.followClock)
+        if midi.followClock {
+            Text(incoming).font(.caption).foregroundStyle(.secondary)
+        }
+        Toggle("Start and stop with the other app", isOn: $midi.followStartStop)
+    }
+
+    private static let sendHelp = "Logic, Ableton, GarageBand or a drum machine can follow the metronome's tempo, start and stop. Choose \u{201C}Metronome Killer\u{201D} as the MIDI clock source there."
+
+    private var incoming: String {
+        midi.incomingBpm > 0 ? String(format: "Receiving %.1f BPM (quarter notes)", midi.incomingBpm) : "No clock coming in yet."
+    }
+}
+
+private struct MidiPedalRows: View {
+    @ObservedObject var midi: Midi
+
+    var body: some View {
+        ForEach(Midi.Action.allCases) { a in MidiActionRow(midi: midi, action: a) }
+        Text(Self.help).font(.caption).foregroundStyle(.secondary)
+        Text(status).font(.caption).foregroundStyle(.secondary)
+    }
+
+    private static let help = "Click Learn, then press the pedal, pad or key. Footswitches that type keys instead of sending MIDI already work: Space starts and stops, Page Down / Page Up step through a setlist."
+
+    private var status: String {
+        let n = midi.sourceCount
+        let base = "Listening to \(n) MIDI source" + (n == 1 ? "" : "s")
+        return midi.lastSeen.isEmpty ? base : base + " · last: " + midi.lastSeen
+    }
+}
+
+private struct MidiActionRow: View {
+    @ObservedObject var midi: Midi
+    let action: Midi.Action
+
+    var body: some View {
+        let learned: String = midi.mappings[action]?.label ?? "—"
+        let waiting: Bool = midi.learning == action
+        HStack {
+            Text(action.label)
+            Spacer()
+            Text(learned).foregroundStyle(.secondary)
+            Button(waiting ? "Press it now…" : "Learn") { midi.learn(action) }
+            if midi.mappings[action] != nil {
+                Button { midi.forget(action) } label: { Image(systemName: "xmark") }
+                    .buttonStyle(.borderless)
+                    .help("Forget")
+            }
+        }
     }
 }
 
