@@ -98,6 +98,7 @@ private:
 
     std::atomic<bool> clicksEnabled_{true};
     std::atomic<int> previewSound_{-1};
+    std::atomic<bool> rewind_{false};
 
     // Synthesised voices: [sound][accent, normal, sub]
     std::vector<std::array<std::vector<float>, 3>> voices_;

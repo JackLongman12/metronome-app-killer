@@ -5,6 +5,10 @@ name: Build and release
 on:
   push:
     branches: [main]
+    # Docs and the PC-side beat-tracking lab don't change the app, so skip a release.
+    paths-ignore:
+      - "**.md"
+      - "tools/**"
   workflow_dispatch:
 
 permissions:

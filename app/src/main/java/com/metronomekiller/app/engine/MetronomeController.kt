@@ -75,6 +75,9 @@ class MetronomeController(private val context: Context, val prefs: AppPrefs) {
     private var poller: Job? = null
     private var previewStopper: Job? = null
 
+    /** True while a screen of the app is visible. */
+    private var foreground = false
+
     init {
         pushAll()
         // Re-detect the output when headphones/Bluetooth connect or disconnect,
@@ -101,6 +104,27 @@ class MetronomeController(private val context: Context, val prefs: AppPrefs) {
         NativeEngine.nSetBeats(IntArray(s.beats.size) { s.beats[it].ordinal })
         NativeEngine.nSetSubdivision(s.subdivision.perBeat)
         NativeEngine.nSetSound(s.sound.ordinal)
+        NativeEngine.nSetVolume(prefs.volume.value)
+    }
+
+    fun setVolume(v: Float) {
+        prefs.setVolume(v)
+        NativeEngine.nSetVolume(v)
+    }
+
+    /**
+     * Called when the app comes to the front / goes to the back.
+     *
+     * LEARN: opening an audio stream talks to the audio hardware and can take
+     * 100–300 ms. Doing that when you press play makes the first click late,
+     * which feels unresponsive. So while the app is on screen we keep a silent
+     * stream open ("warm"); play just switches the clicks on — instant.
+     * When the app leaves the screen (and isn't playing) we close it to save battery.
+     */
+    fun setForeground(visible: Boolean) {
+        foreground = visible
+        if (_state.value.playing) return
+        if (visible) NativeEngine.nStart(clicks = false) else NativeEngine.nStop()
     }
 
     fun setBpm(bpm: Int) = edit { it.copy(bpm = bpm.coerceIn(MIN_BPM, MAX_BPM)) }
@@ -142,9 +166,9 @@ class MetronomeController(private val context: Context, val prefs: AppPrefs) {
             // Open a silent stream just for the preview, and close it shortly after.
             NativeEngine.nStart(clicks = false)
             previewStopper?.cancel()
-            previewStopper = scope.launch {
+            if (!foreground) previewStopper = scope.launch {
                 delay(600)
-                if (!_state.value.playing) NativeEngine.nStop()
+                if (!_state.value.playing && !foreground) NativeEngine.nStop()
             }
         }
         NativeEngine.nPreview(sound.ordinal)
@@ -182,7 +206,8 @@ class MetronomeController(private val context: Context, val prefs: AppPrefs) {
     }
 
     fun stop() {
-        NativeEngine.nStop()
+        // Keep the stream warm while the app is visible so the next play is instant.
+        if (foreground) NativeEngine.nSetClicksEnabled(false) else NativeEngine.nStop()
         poller?.cancel()
         _currentBeat.value = -1
         _state.update { it.copy(playing = false) }
@@ -248,7 +273,7 @@ class MetronomeController(private val context: Context, val prefs: AppPrefs) {
 
     companion object {
         const val MIN_BPM = 20
-        const val MAX_BPM = 300
+        const val MAX_BPM = 500
 
         fun tempoName(bpm: Int) = when {
             bpm < 40 -> "Grave"

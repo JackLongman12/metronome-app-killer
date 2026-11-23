@@ -12,3 +12,8 @@ captures/
 *.jks
 *.keystore
 keystore.properties
+
+# Beat lab: Python env, downloaded test audio and outputs stay local
+tools/beat-lab/.venv/
+tools/beat-lab/audio/
+tools/beat-lab/out/

@@ -86,7 +86,20 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // Make the phone's volume buttons control media (our click) volume,
+        // even when the metronome isn't playing yet.
+        volumeControlStream = android.media.AudioManager.STREAM_MUSIC
         setContent { AppTheme { App() } }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        metronome.setForeground(true)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        metronome.setForeground(false)
     }
 
     override fun onResume() {
@@ -135,6 +148,7 @@ class MainActivity : ComponentActivity() {
             if (!flashOn) return@LaunchedEffect
             metronome.beatEvents.collect { e ->
                 if (e.state == BeatState.MUTE) return@collect
+                if (prefs.flashAccentsOnly.value && e.state != BeatState.ACCENT) return@collect
                 flashAccent = e.state == BeatState.ACCENT
                 launch {
                     flashAlpha.snapTo(if (flashAccent) 0.35f else 0.14f)

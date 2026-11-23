@@ -12,17 +12,25 @@
 namespace {
 using Voice = std::vector<float>;
 
-// Renders [seconds] of audio from a per-sample generator, with a 1 ms attack ramp
-// so onsets never pop.
+// Renders [seconds] of audio from a per-sample generator, then NORMALISES it so
+// its loudest sample hits exactly [gain]. That way every sound is as loud as it
+// can be without distorting, and accent/normal/sub differ only by [gain].
+//
+// LEARN: perceived "snappiness" comes from the first ~2 ms (the transient).
+// A long fade-in softens it, so the ramp is only 0.15 ms: just enough to avoid
+// a pop, short enough to keep the click crisp.
 template <typename F>
 Voice render(int sr, double seconds, float gain, F gen) {
     const int n = static_cast<int>(sr * seconds);
     Voice out(n);
+    float peak = 0.0f;
     for (int i = 0; i < n; ++i) {
         const double t = static_cast<double>(i) / sr;
-        const double attack = std::min(1.0, t / 0.001);
-        out[i] = static_cast<float>(gen(t) * attack * gain);
+        const double attack = std::min(1.0, t / 0.00015);
+        out[i] = static_cast<float>(gen(t) * attack);
+        peak = std::max(peak, std::fabs(out[i]));
     }
+    if (peak > 0.0f) for (auto& x : out) x *= gain / peak;
     return out;
 }
 
@@ -77,28 +85,35 @@ Voice cowbell(int sr, double f1, double f2, float gain) {
 // Each sound: {accent, normal, subdivision}. Order must match Kotlin ClickSound.
 std::vector<std::array<Voice, 3>> buildAll(int sr) {
     std::vector<std::array<Voice, 3>> v;
-    auto tone = [&](double f, double decayMs, float g, double len = 0.08) {
-        return render(sr, len, g, [=](double t) { return sine(f, t) * env(t, decayMs); });
+    // A 1.5 ms burst of noise on top of a tone gives it a sharp "tick" onset,
+    // which makes the click feel immediate even through phone speakers.
+    auto tick = [](double t) {
+        static Noise n;
+        return t < 0.0015 ? n.next() * (1.0 - t / 0.0015) : 0.0;
+    };
+    auto tone = [&](double f, double decayMs, float g, double len = 0.09) {
+        return render(sr, len, g, [=](double t) { return sine(f, t) * env(t, decayMs) + 0.45 * tick(t); });
     };
     auto wood = [&](double f, double decayMs, float g) {
         return render(sr, 0.1, g, [=](double t) {
-            return (0.8 * sine(f, t) + 0.25 * sine(f * 2.76, t)) * env(t, decayMs);
+            return (0.8 * sine(f, t) + 0.3 * sine(f * 2.76, t)) * env(t, decayMs) + 0.35 * tick(t);
         });
     };
     auto beep = [&](double f, double holdMs, float g) {
         return render(sr, holdMs / 1000.0 + 0.01, g, [=](double t) {
             const double rel = t > holdMs / 1000.0 ? std::max(0.0, 1.0 - (t - holdMs / 1000.0) / 0.01) : 1.0;
-            return sine(f, t) * rel * 0.8;
+            return sine(f, t) * rel;
         });
     };
-    v.push_back({tone(1760, 12, 0.9f), tone(1320, 12, 0.7f), tone(1320, 8, 0.3f)});        // Click
-    v.push_back({wood(1050, 20, 0.9f), wood(800, 20, 0.75f), wood(800, 14, 0.35f)});        // Woodblock
-    v.push_back({beep(1320, 45, 0.8f), beep(880, 45, 0.6f), beep(880, 25, 0.25f)});         // Beep
-    v.push_back({tone(2500, 28, 0.9f), tone(2000, 28, 0.75f), tone(2000, 18, 0.3f)});       // Clave
-    v.push_back({cowbell(sr, 587, 845, 0.9f), cowbell(sr, 540, 800, 0.7f), cowbell(sr, 540, 800, 0.3f)});  // Cowbell
-    v.push_back({hat(sr, 60, 1.0f), hat(sr, 30, 0.8f), hat(sr, 18, 0.4f)});                 // Hi-hat
-    v.push_back({rim(sr, 1900, 1.0f), rim(sr, 1700, 0.8f), rim(sr, 1700, 0.35f)});          // Rimshot
-    v.push_back({kick(sr, 1.0f), hat(sr, 30, 0.8f), hat(sr, 18, 0.35f)});                   // Kick and hat
+    // Levels: accent 1.0, normal 0.8, subdivision 0.45 (after normalising).
+    v.push_back({tone(1760, 22, 1.0f), tone(1320, 22, 0.8f), tone(1320, 14, 0.45f)});      // Click
+    v.push_back({wood(1050, 26, 1.0f), wood(800, 26, 0.8f), wood(800, 18, 0.45f)});        // Woodblock
+    v.push_back({beep(1320, 50, 1.0f), beep(880, 50, 0.8f), beep(880, 30, 0.45f)});        // Beep
+    v.push_back({tone(2500, 32, 1.0f), tone(2000, 32, 0.8f), tone(2000, 20, 0.45f)});      // Clave
+    v.push_back({cowbell(sr, 587, 845, 1.0f), cowbell(sr, 540, 800, 0.8f), cowbell(sr, 540, 800, 0.45f)});  // Cowbell
+    v.push_back({hat(sr, 70, 1.0f), hat(sr, 40, 0.8f), hat(sr, 22, 0.45f)});               // Hi-hat
+    v.push_back({rim(sr, 1900, 1.0f), rim(sr, 1700, 0.8f), rim(sr, 1700, 0.45f)});         // Rimshot
+    v.push_back({kick(sr, 1.0f), hat(sr, 40, 0.8f), hat(sr, 22, 0.45f)});                  // Kick and hat
     return v;
 }
 int64_t monotonicNowNs() {
@@ -177,8 +192,13 @@ bool ClickEngine::openStream() {
 
 bool ClickEngine::start(bool clicks) {
     std::lock_guard<std::mutex> g(lock_);
+    if (running_.load()) {
+        // Stream already open ("warm"): starting is instant, no device setup.
+        if (clicks && !clicksEnabled_.load()) rewind_.store(true);
+        clicksEnabled_.store(clicks);
+        return true;
+    }
     clicksEnabled_.store(clicks);
-    if (running_.load()) return true;
     running_.store(true);
     if (!openStream()) {
         running_.store(false);
@@ -219,6 +239,13 @@ oboe::DataCallbackResult ClickEngine::onAudioReady(oboe::AudioStream* stream, vo
     const float vol = volume_.load();
     const bool clicks = clicksEnabled_.load();
 
+    // A fresh start on an already-open stream: begin again from beat 1, now.
+    if (rewind_.exchange(false)) {
+        beatIdx_ = 0;
+        subPos_ = 0;
+        framesToNext_ = 0.0;
+    }
+
     const int pv = previewSound_.exchange(-1);
     if (pv >= 0 && pv < static_cast<int>(voices_.size())) {
         voice_ = &voices_[pv][0];
@@ -255,7 +282,9 @@ oboe::DataCallbackResult ClickEngine::onAudioReady(oboe::AudioStream* stream, vo
         }
         float v = 0.0f;
         if (voice_ && voicePos_ < voice_->size()) v = (*voice_)[voicePos_++] * vol;
-        out[i] = v;
+        // Soft limiter: lifts quieter parts (sounds louder overall) and lets the
+        // volume go above 100% without harsh digital clipping.
+        out[i] = static_cast<float>(std::tanh(1.4 * v) / std::tanh(1.4));
         // While silent (preview-only stream) hold the countdown at 0 so the first
         // real click lands immediately when clicks are switched on, instead of
         // a backlog of "missed" clicks firing at once.

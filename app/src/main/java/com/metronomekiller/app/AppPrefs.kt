@@ -21,6 +21,16 @@ class AppPrefs(context: Context) {
     val flash: StateFlow<Boolean> = _flash
     fun setFlash(on: Boolean) { _flash.value = on; prefs.edit { putBoolean("flash", on) } }
 
+    /** Flash only on accented beats instead of every beat. */
+    private val _flashAccentsOnly = MutableStateFlow(prefs.getBoolean("flash_accents_only", false))
+    val flashAccentsOnly: StateFlow<Boolean> = _flashAccentsOnly
+    fun setFlashAccentsOnly(on: Boolean) { _flashAccentsOnly.value = on; prefs.edit { putBoolean("flash_accents_only", on) } }
+
+    /** Click volume, 0.0–2.0 (above 1.0 is a boost through the engine's soft limiter). */
+    private val _volume = MutableStateFlow(prefs.getFloat("volume", 1f))
+    val volume: StateFlow<Float> = _volume
+    fun setVolume(v: Float) { _volume.value = v; prefs.edit { putFloat("volume", v) } }
+
     private val _vibrate = MutableStateFlow(prefs.getBoolean("vibrate", false))
     val vibrate: StateFlow<Boolean> = _vibrate
     fun setVibrate(on: Boolean) { _vibrate.value = on; prefs.edit { putBoolean("vibrate", on) } }

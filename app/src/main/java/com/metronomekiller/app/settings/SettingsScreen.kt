@@ -14,6 +14,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -22,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.metronomekiller.app.BuildConfig
 import com.metronomekiller.app.engine.MetronomeController
@@ -47,6 +49,8 @@ fun SettingsScreen(
     val auto by updates.autoCheck.collectAsStateWithLifecycle()
     val flash by controller.prefs.flash.collectAsStateWithLifecycle()
     val vibrate by controller.prefs.vibrate.collectAsStateWithLifecycle()
+    val accentsOnly by controller.prefs.flashAccentsOnly.collectAsStateWithLifecycle()
+    val volume by controller.prefs.volume.collectAsStateWithLifecycle()
     val route by controller.route.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
@@ -56,8 +60,21 @@ fun SettingsScreen(
             Text("Settings", style = MaterialTheme.typography.titleLarge)
         }
 
+        SectionLabel("Sound")
+        Column(Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
+            Text("Click volume · ${(volume * 100).roundToInt()}%")
+            Text(
+                "Above 100% boosts the click. Your phone's volume buttons also work.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Slider(value = volume, onValueChange = controller::setVolume, valueRange = 0f..2f)
+        }
+
+        HorizontalDivider(Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
         SectionLabel("Beat feedback")
         Toggle("Flash the screen", "Useful on loud stages or with earplugs", flash, controller.prefs::setFlash)
+        if (flash) Toggle("Accents only", "Flash just on accented beats", accentsOnly, controller.prefs::setFlashAccentsOnly)
         Toggle("Vibrate", "Feel the beat, accents are stronger", vibrate, controller.prefs::setVibrate)
         Item("Audio sync", "${route.label} · ${controller.prefs.latencyMs(route.key)} ms. Line up visuals with Bluetooth delay", onOpenCalibration)
 
