@@ -31,7 +31,7 @@ final class Updater: ObservableObject {
         case failed(String)
     }
 
-    static let repo = Bundle.main.object(forInfoDictionaryKey: "GitHubRepo") as? String ?? "JackLongman12/metronome-app-killer"
+    nonisolated static let repo = Bundle.main.object(forInfoDictionaryKey: "GitHubRepo") as? String ?? "JackLongman12/metronome-app-killer"
 
     @Published private(set) var state: State = .idle
 
