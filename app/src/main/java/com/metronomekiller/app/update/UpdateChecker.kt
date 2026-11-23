@@ -27,35 +27,74 @@ data class ReleaseInfo(
  * main (UI) thread. `suspend fun` + `withContext(Dispatchers.IO)` moves the work
  * to a background thread pool and pauses (not blocks) the caller until it's done.
  *
- * We call GitHub's public REST API — no login needed for public repos
- * (limit: 60 requests/hour per IP, plenty for "check on launch").
+ * We call GitHub's public REST API — no login needed for public repos. Its
+ * limit is 60 requests/hour per IP address, and on mobile data many phones
+ * share one address, so the API can answer 403 ("rate limited"). Then we fall
+ * back to the normal web page github.com/<repo>/releases/latest, which isn't
+ * limited: it redirects to the newest tag (".../tag/b15"), and CI names the
+ * APK after that tag, so we can build the download link ourselves.
  */
 object UpdateChecker {
     private const val TIMEOUT_MS = 15_000
 
     /** Returns the latest release, or null if the repo has no usable release yet. */
     suspend fun fetchLatest(): ReleaseInfo? = withContext(Dispatchers.IO) {
+        try {
+            fromApi()
+        } catch (e: RateLimited) {
+            fromWebPage()
+        }
+    }
+
+    private class RateLimited : IOException()
+
+    private fun fromWebPage(): ReleaseInfo? {
+        val repo = BuildConfig.GITHUB_REPO
+        val conn = (URL("https://github.com/$repo/releases/latest").openConnection() as HttpURLConnection).apply {
+            connectTimeout = TIMEOUT_MS
+            readTimeout = TIMEOUT_MS
+            instanceFollowRedirects = false // we want the redirect's address, not the page
+        }
+        try {
+            val location = conn.getHeaderField("Location") ?: throw IOException("GitHub returned HTTP ${conn.responseCode}")
+            val tag = location.substringAfterLast("/tag/", "").ifEmpty { return null }
+            val code = tag.removePrefix("b").toIntOrNull() ?: return null
+            return ReleaseInfo(
+                versionCode = code,
+                versionName = "Build $code",
+                notes = "",
+                apkUrl = "https://github.com/$repo/releases/download/$tag/metronome-killer-$tag.apk",
+                apkSize = -1,
+            )
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    private fun fromApi(): ReleaseInfo? {
         val url = URL("https://api.github.com/repos/${BuildConfig.GITHUB_REPO}/releases/latest")
         val conn = (url.openConnection() as HttpURLConnection).apply {
             connectTimeout = TIMEOUT_MS
             readTimeout = TIMEOUT_MS
             setRequestProperty("Accept", "application/vnd.github+json")
+            setRequestProperty("User-Agent", "metronome-killer-updater") // GitHub's API rejects requests without one
         }
         try {
             when (conn.responseCode) {
                 200 -> Unit
-                404 -> return@withContext null
+                404 -> return null
+                403, 429 -> throw RateLimited()
                 else -> throw IOException("GitHub returned HTTP ${conn.responseCode}")
             }
             val json = JSONObject(conn.inputStream.bufferedReader().use { it.readText() })
             val code = json.getString("tag_name").removePrefix("b").toIntOrNull()
-                ?: return@withContext null
+                ?: return null
             val assets = json.getJSONArray("assets")
             val apk = (0 until assets.length())
                 .map { assets.getJSONObject(it) }
                 .firstOrNull { it.getString("name").endsWith(".apk") }
-                ?: return@withContext null
-            ReleaseInfo(
+                ?: return null
+            return ReleaseInfo(
                 versionCode = code,
                 versionName = json.optString("name", "Build $code"),
                 notes = json.optString("body", ""),
