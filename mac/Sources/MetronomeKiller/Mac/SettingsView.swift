@@ -62,8 +62,8 @@ private struct MidiSettings: View {
 
     var body: some View {
         Form {
-            Section(header: Text("Sync")) { MidiSyncRows(midi: midi) }
-            Section(header: Text("Pedals and controllers")) { MidiPedalRows(midi: midi) }
+            SwiftUI.Section(header: Text("Sync")) { MidiSyncRows(midi: midi) }
+            SwiftUI.Section(header: Text("Pedals and controllers")) { MidiPedalRows(midi: midi) }
         }
         .formStyle(.grouped)
         .onAppear { midi.start(app) }
