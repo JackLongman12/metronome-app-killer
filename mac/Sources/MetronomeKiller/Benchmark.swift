@@ -70,10 +70,21 @@ enum Benchmark {
             stat("analysis_error", error.localizedDescription.replacingOccurrences(of: " ", with: "_"))
         }
 
-        // 3. Memory
+        // 3. Memory: the most used at any moment, and what's still held after analysis.
         var usage = rusage()
         getrusage(RUSAGE_SELF, &usage)
-        stat("peak_memory_mb", String(format: "%.0f", Double(usage.ru_maxrss) / 1_048_576)) // bytes on macOS
+        stat("peak_memory_during_analysis_mb", String(format: "%.0f", Double(usage.ru_maxrss) / 1_048_576)) // bytes on macOS
+        stat("memory_after_analysis_mb", String(format: "%.0f", Double(currentMemory()) / 1_048_576))
+    }
+
+    /** Memory in use right now ("physical footprint", what Activity Monitor shows). */
+    private static func currentMemory() -> UInt64 {
+        var info = task_vm_info_data_t()
+        var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size)
+        let kr = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count) }
+        }
+        return kr == KERN_SUCCESS ? info.phys_footprint : 0
     }
 
     /**

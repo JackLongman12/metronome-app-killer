@@ -24,6 +24,9 @@ int mk_ort_run(const float* audio, int64_t length, float** beat, float** down, i
 
 void mk_ort_free(float* p);
 
+/** Frees the model and its working memory (call after each song). */
+void mk_ort_close(void);
+
 #ifdef __cplusplus
 }
 #endif

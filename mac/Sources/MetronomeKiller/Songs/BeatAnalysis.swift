@@ -172,6 +172,7 @@ enum BeatPipeline {
 
     static func analyse(_ sig: [Float], progress: (Double) -> Void) throws -> Result {
         try open()
+        defer { mk_ort_close() } // give the model's working memory back as soon as we're done
         let nFrames = 1 + sig.count / HOP
         // Reflect-pad 512 samples at both ends (what torchaudio's center=True does).
         let pad = N_FFT / 2
