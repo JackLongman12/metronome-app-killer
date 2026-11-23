@@ -87,7 +87,7 @@ fun SongScreen(song: Song, metronome: MetronomeController, library: SongLibrary,
     var renaming by remember { mutableStateOf<PartRow?>(null) }
     // Edit mode: a selected stretch of rows (first..last row index) and an undo history
     var editing by remember { mutableStateOf(false) }
-    var selection by remember { mutableStateOf<IntRange?>(null) }
+    var selectionRaw by remember { mutableStateOf<IntRange?>(null) }
     val undo = remember { androidx.compose.runtime.mutableStateListOf<com.metronomekiller.app.analysis.TempoMap>() }
     var showMeter by remember { mutableStateOf(false) }
 
@@ -105,6 +105,9 @@ fun SongScreen(song: Song, metronome: MetronomeController, library: SongLibrary,
     val usualMeter = remember(map) { PartRows.usualMeter(map) }
     val currentRow = rows.indexOfLast { it.first <= currentBar.coerceAtLeast(0) }
     val showRows = rowsView || editing // editing always works on the part rows
+    // A selection only makes sense for the rows it was made on: if the map changed
+    // underneath (switching AI/tab/yours, Discard), a stale one would point past the end.
+    val selection: IntRange? = selectionRaw?.takeIf { it.first >= 0 && it.last < rows.size }
 
     /**
      * Apply one fix to the selected bars, keep the old map for Undo, save, and
@@ -125,7 +128,7 @@ fun SongScreen(song: Song, metronome: MetronomeController, library: SongLibrary,
             val t = fixed.bars[newRows[it].first].start
             t >= t0 - 1e-6 && t < t1 - 1e-6
         }
-        selection = if (inside.isEmpty()) null else inside.first()..inside.last()
+        selectionRaw = if (inside.isEmpty()) null else inside.first()..inside.last()
         tick()
     }
 
@@ -225,9 +228,9 @@ fun SongScreen(song: Song, metronome: MetronomeController, library: SongLibrary,
                 style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f),
             )
             Text("All", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.clickable { selection = if (rows.isEmpty()) null else rows.indices }.padding(horizontal = 8.dp))
+                modifier = Modifier.clickable { selectionRaw = if (rows.isEmpty()) null else rows.indices }.padding(horizontal = 8.dp))
             Text("Done", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.clickable { editing = false; selection = null }.padding(start = 8.dp))
+                modifier = Modifier.clickable { editing = false; selectionRaw = null }.padding(start = 8.dp))
         } else Row(Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(if (rowsView) "Parts · tap a bar to jump, hold to loop" else "Parts · tap to jump",
                 style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
@@ -268,7 +271,7 @@ fun SongScreen(song: Song, metronome: MetronomeController, library: SongLibrary,
             onSelect = if (!editing) null else { i ->
                 // first tap picks a row; later taps stretch the selection to include the tapped row
                 val sel = selection
-                selection = when {
+                selectionRaw = when {
                     sel == null -> i..i
                     i in sel -> i..i
                     else -> minOf(sel.first, i)..maxOf(sel.last, i)
@@ -394,10 +397,14 @@ fun SongScreen(song: Song, metronome: MetronomeController, library: SongLibrary,
             onMeter = { showMeter = true },
             onUndo = {
                 undo.removeLastOrNull()?.let { prev -> library.saveEdit(song.id, prev) }
-                selection = null; tick()
+                selectionRaw = null; tick()
             },
-            onDiscard = { undo.clear(); selection = null; library.discardEdit(song.id); tick() },
-        ) else Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)) {
+            onDiscard = { undo.clear(); selectionRaw = null; library.discardEdit(song.id); tick() },
+        ) else Row(
+            // scrolls sideways on narrow phones so no chip (like Edit) gets squeezed off the screen
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+        ) {
             Chip(if (clickOn) "Click on" else "Click off", clickOn) { player.setClickOn(!clickOn) }
             Chip("Speed ${(speed * 100).toInt()}%", speed != 1f) { player.cycleSpeed() }
             Chip("Mix", showMix) { showMix = true }

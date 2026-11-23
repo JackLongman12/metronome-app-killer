@@ -204,6 +204,7 @@ class PracticeController(context: Context, private val metronome: MetronomeContr
 
     fun toggle() = if (_running.value != null) stop() else start(_tool.value)
 
+    @Synchronized // start/stop come from the screen, cleanUp also from a background watcher
     fun start(t: Tool) {
         if (metronome.state.value.playing) metronome.stop()
         cleanUp()
@@ -265,11 +266,13 @@ class PracticeController(context: Context, private val metronome: MetronomeContr
         metronome.start()
     }
 
+    @Synchronized // start/stop come from the screen, cleanUp also from a background watcher
     fun stop() {
         metronome.stop()
         cleanUp()
     }
 
+    @Synchronized // start/stop come from the screen, cleanUp also from a background watcher
     private fun cleanUp() {
         follower?.cancel(); follower = null
         // Write the finished run to the history

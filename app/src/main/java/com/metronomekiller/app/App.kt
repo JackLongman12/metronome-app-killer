@@ -24,6 +24,7 @@ class App : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        CrashLog.install(this)
         prefs = AppPrefs(this)
         metronome = MetronomeController(this, prefs)
         songs = SongLibrary(this)

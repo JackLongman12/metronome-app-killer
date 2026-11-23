@@ -53,6 +53,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.metronomekiller.app.metronome.MetronomeScreen
 import com.metronomekiller.app.settings.CalibrationScreen
@@ -176,6 +177,33 @@ class MainActivity : ComponentActivity() {
             askNotifications()
             metronome.togglePlay()
         }
+        // If the app crashed last time, show what happened so it can be copied into a bug report.
+        var crash by remember { mutableStateOf(CrashLog.read(this)) }
+        crash?.let { report ->
+            val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = {},
+                title = { Text("The app crashed last time") },
+                text = {
+                    Column {
+                        Text("Copy this and send it to whoever builds the app, so the cause can be fixed.",
+                            style = MaterialTheme.typography.bodySmall)
+                        Text(report, fontSize = 10.sp, lineHeight = 12.sp,
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                            modifier = Modifier.padding(top = 8.dp).height(260.dp)
+                                .verticalScroll(androidx.compose.foundation.rememberScrollState()))
+                    }
+                },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(onClick = {
+                        clipboard.setText(androidx.compose.ui.text.AnnotatedString(report))
+                    }) { Text("Copy") }
+                },
+                dismissButton = {
+                    androidx.compose.material3.TextButton(onClick = { CrashLog.clear(this@MainActivity); crash = null }) { Text("Close") }
+                },
+            )
+        }
         val snackbar = remember { SnackbarHostState() }
         val scope = rememberCoroutineScope()
         val say: (String) -> Unit = { msg -> scope.launch { snackbar.showSnackbar(msg) } }
@@ -236,7 +264,11 @@ class MainActivity : ComponentActivity() {
                         onLoadSong = { tab = Tab.SONGS }, onComingSoon = say)
                     Tab.SONGS -> {
                         val library = App.from(this@MainActivity).songs
-                        val song = openSong?.let { library.song(it) }
+                        // LEARN: collect the list as state, so the song screen redraws whenever the
+                        // song changes (an edit, a rename, switching maps). Reading library.song(id)
+                        // once gave the screen a frozen copy, and edits looked like they did nothing.
+                        val songs by library.songs.collectAsStateWithLifecycle()
+                        val song = openSong?.let { id -> songs.firstOrNull { it.id == id } }
                         if (song?.map != null) SongScreen(song, metronome, library, onBack = { openSong = null })
                         else SongsScreen(library, onOpen = { openSong = it })
                     }
