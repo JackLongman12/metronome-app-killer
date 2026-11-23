@@ -1,3 +1,4 @@
+import AudioToolbox
 import AVFoundation
 import ClickCore
 import CoreAudio
@@ -77,9 +78,17 @@ final class AudioOutput: ObservableObject {
         AudioUnitSetProperty(unit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0, &id, UInt32(MemoryLayout<AudioDeviceID>.size))
     }
 
+    struct ChannelPair: Identifiable, Hashable {
+        let first: Int
+        let label: String
+        var id: Int { first }
+    }
+
     /** "Channels 1–2", "Channels 3–4"… for a device with [n] outputs. */
-    static func pairs(_ n: Int) -> [(first: Int, label: String)] {
-        guard n > 2 else { return [(0, n == 1 ? "Channel 1" : "Channels 1–2")] }
-        return stride(from: 0, to: n, by: 2).map { f in (f, f + 1 < n ? "Channels \(f + 1)–\(f + 2)" : "Channel \(f + 1)") }
+    static func pairs(_ n: Int) -> [ChannelPair] {
+        guard n > 2 else { return [ChannelPair(first: 0, label: n == 1 ? "Channel 1" : "Channels 1–2")] }
+        return stride(from: 0, to: n, by: 2).map { f in
+            ChannelPair(first: f, label: f + 1 < n ? "Channels \(f + 1)–\(f + 2)" : "Channel \(f + 1)")
+        }
     }
 }

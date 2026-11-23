@@ -37,7 +37,7 @@ private struct AudioSettings: View {
             }
             if let d = out.chosen, d.channels > 2 {
                 Picker("Metronome click on", selection: Binding(get: { out.channel }, set: { out.choose(uid: d.uid, channel: $0) })) {
-                    ForEach(AudioOutput.pairs(d.channels), id: \.first) { Text($0.label).tag($0.first) }
+                    ForEach(AudioOutput.pairs(d.channels)) { Text($0.label).tag($0.first) }
                 }
                 Text("On an audio interface, put the click on the outputs that feed only your headphones (often 3–4), so it never goes to the speakers or the recording.")
                     .font(.caption).foregroundStyle(.secondary)

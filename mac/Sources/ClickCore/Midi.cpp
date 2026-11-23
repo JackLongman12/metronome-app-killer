@@ -15,6 +15,7 @@
 
 #include <CoreMIDI/CoreMIDI.h>
 #include <mach/mach_time.h>
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cmath>
