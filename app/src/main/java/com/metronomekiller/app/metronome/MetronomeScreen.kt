@@ -63,9 +63,13 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.metronomekiller.app.ui.rememberTick
 import com.metronomekiller.app.engine.MetronomeController
 import com.metronomekiller.app.engine.Subdivision
 import com.metronomekiller.app.ui.AppIcons
+import com.metronomekiller.app.ui.ink
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.ui.graphics.Color
 import kotlin.math.roundToInt
 
 /**
@@ -88,7 +92,7 @@ fun MetronomeScreen(
     val s by controller.state.collectAsStateWithLifecycle()
     val current by controller.currentBeat.collectAsStateWithLifecycle()
     val display by controller.prefs.bpmDisplay.collectAsStateWithLifecycle()
-    val haptics = LocalHapticFeedback.current
+    val tick = rememberTick()
 
     var editBpm by remember { mutableStateOf(false) }
     var editSig by remember { mutableStateOf(false) }
@@ -151,7 +155,7 @@ fun MetronomeScreen(
                 SquareButton(
                     onClick = {
                         controller.tap()
-                        haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                        tick()
                     },
                     size = 68,
                 ) { Text("Tap", fontSize = 18.sp, fontWeight = FontWeight.Medium) }
@@ -196,13 +200,13 @@ private fun CreateLoadSwitch(onLoad: () -> Unit) {
             .padding(horizontal = 40.dp)
             .height(44.dp)
             .clip(RoundedCornerShape(12.dp))
-            .background(c.scrim.copy(alpha = 0.45f))
+            .background(c.ink.copy(alpha = 0.45f))
             .padding(3.dp)
     ) {
         Box(
-            Modifier.weight(1f).fillMaxSize().clip(RoundedCornerShape(10.dp)).background(c.scrim.copy(alpha = 0.6f)),
+            Modifier.weight(1f).fillMaxSize().clip(RoundedCornerShape(10.dp)).background(c.ink),
             contentAlignment = Alignment.Center,
-        ) { Text("Create", fontWeight = FontWeight.Medium) }
+        ) { Text("Create", fontWeight = FontWeight.Medium, color = Color.White) }
         Box(
             Modifier.weight(1f).fillMaxSize().clip(RoundedCornerShape(10.dp)).clickable(onClick = onLoad),
             contentAlignment = Alignment.Center,
@@ -237,10 +241,13 @@ fun SquareButton(onClick: () -> Unit, size: Int = 64, dark: Boolean = false, con
             .size(size.dp)
             .shadow(6.dp, shape)
             .clip(shape)
-            .background(if (dark) c.scrim.copy(alpha = 0.8f) else c.surfaceContainerHigh)
+            .background(if (dark) c.ink else c.surfaceContainerHigh)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
-    ) { content() }
+    ) {
+        // The dark button always has light content, whatever the theme.
+        CompositionLocalProvider(LocalContentColor provides if (dark) Color.White else c.onSurface) { content() }
+    }
 }
 
 /** The "•••" sheet: sound, volume and beat feedback, without leaving the metronome. */

@@ -53,10 +53,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.metronomekiller.app.ui.rememberTick
 import com.metronomekiller.app.engine.BeatState
 import com.metronomekiller.app.engine.MetronomeController
 import com.metronomekiller.app.engine.MetronomeState
 import com.metronomekiller.app.ui.AppIcons
+import com.metronomekiller.app.ui.ink
 import kotlinx.coroutines.launch
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -121,13 +123,13 @@ private fun BigNumber(state: MetronomeState, onEditBpm: () -> Unit, size: Int = 
  */
 @Composable
 fun rememberBpmSetter(controller: MetronomeController): (Int) -> Unit {
-    val haptics = LocalHapticFeedback.current
+    val tick = rememberTick()
     return remember(controller) {
         { bpm: Int ->
             val b = bpm.coerceIn(MIN, MAX)
             if (b != controller.state.value.bpm) {
                 controller.setBpm(b)
-                haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                tick()
             }
         }
     }
@@ -172,7 +174,7 @@ private fun NumberDisplay(state: MetronomeState, controller: MetronomeController
 @Composable
 private fun KnobDisplay(state: MetronomeState, controller: MetronomeController, onEditBpm: () -> Unit) {
     val c = MaterialTheme.colorScheme
-    val haptics = LocalHapticFeedback.current
+    val tick = rememberTick()
     // Which way the knob was last turned (-1 slower, +1 faster) and how lit the
     // matching arrow is (1 = fully lit, fades to 0 shortly after you stop).
     var turnDir by remember { mutableIntStateOf(0) }
@@ -209,7 +211,7 @@ private fun KnobDisplay(state: MetronomeState, controller: MetronomeController, 
                     if (steps != 0) {
                         accum -= steps * 6f
                         controller.nudge(steps)
-                        haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                        tick()
                         turnDir = if (steps > 0) 1 else -1
                         pulse++
                     }
@@ -241,7 +243,7 @@ private fun KnobDisplay(state: MetronomeState, controller: MetronomeController, 
                 arrowHead(200f, -1f, leftColor)
                 arrowHead(340f, 1f, rightColor)
                 // knob body: dark rim, then the face
-                drawCircle(c.scrim.copy(alpha = 0.55f), outerR)
+                drawCircle(c.ink, outerR)
                 drawCircle(c.surfaceVariant, outerR - 10.dp.toPx())
                 // tick marks around the face
                 val tickOuter = outerR - 16.dp.toPx()
@@ -277,7 +279,7 @@ private fun KnobDisplay(state: MetronomeState, controller: MetronomeController, 
 @Composable
 private fun DialDisplay(state: MetronomeState, controller: MetronomeController, onEditBpm: () -> Unit) {
     val c = MaterialTheme.colorScheme
-    val haptics = LocalHapticFeedback.current
+    val tick = rememberTick()
     val fraction = (state.bpm - MIN).toFloat() / (MAX - MIN)
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
@@ -298,7 +300,7 @@ private fun DialDisplay(state: MetronomeState, controller: MetronomeController, 
                     if (steps != 0) {
                         accum -= steps * 6f
                         controller.nudge(steps)
-                        haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                        tick()
                     }
                     change.consume()
                 }
@@ -337,7 +339,7 @@ private fun angleOf(p: Offset, center: Offset): Float =
 @Composable
 private fun RingDisplay(state: MetronomeState, current: Int, controller: MetronomeController, onEditBpm: () -> Unit) {
     val c = MaterialTheme.colorScheme
-    val haptics = LocalHapticFeedback.current
+    val tick = rememberTick()
     val beats = state.beats
     val beatsNow by rememberUpdatedState(beats)
     val density = LocalDensity.current
@@ -351,7 +353,7 @@ private fun RingDisplay(state: MetronomeState, current: Int, controller: Metrono
                     val i = dotPositions.value.indexOfFirst { hypot(it.x - p.x, it.y - p.y) < hit }
                     if (i in beatsNow.indices) {
                         controller.cycleBeat(i)
-                        haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                        tick()
                     } else if (hypot(p.x - size.width / 2f, p.y - size.height / 2f) < size.width / 4f) {
                         onEditBpm()
                     }
@@ -408,7 +410,7 @@ private fun RingDisplay(state: MetronomeState, current: Int, controller: Metrono
 @Composable
 private fun RulerDisplay(state: MetronomeState, controller: MetronomeController, onEditBpm: () -> Unit) {
     val c = MaterialTheme.colorScheme
-    val haptics = LocalHapticFeedback.current
+    val tick = rememberTick()
     val scope = rememberCoroutineScope()
     val measurer = rememberTextMeasurer()
     val spacingPx = with(LocalDensity.current) { 10.dp.toPx() }
@@ -422,7 +424,7 @@ private fun RulerDisplay(state: MetronomeState, controller: MetronomeController,
         val b = v.roundToInt()
         if (b != controller.state.value.bpm) {
             controller.setBpm(b)
-            haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+            tick()
         }
     }
 

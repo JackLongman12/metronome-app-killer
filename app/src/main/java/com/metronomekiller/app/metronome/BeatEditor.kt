@@ -26,7 +26,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
+import com.metronomekiller.app.ui.rememberTick
 import com.metronomekiller.app.engine.BeatState
+import com.metronomekiller.app.ui.ink
 import kotlin.math.abs
 
 /**
@@ -78,23 +80,20 @@ private fun BeatBlock(
     modifier: Modifier,
 ) {
     val c = MaterialTheme.colorScheme
-    val haptics = LocalHapticFeedback.current
+    val tick = rememberTick()
     // LEARN: pointerInput's gesture loop starts once and keeps running; without
     // rememberUpdatedState it would keep calling the callbacks from its first
     // composition (with a stale beat state).
     val tap by rememberUpdatedState(onTap)
     val swipe by rememberUpdatedState(onSwipe)
-    val fill by animateColorAsState(if (playing) c.primary else c.scrim, tween(60), label = "beatFill")
-    val outer = RoundedCornerShape(10.dp)
+    val fill by animateColorAsState(if (playing) c.primary else c.ink, tween(60), label = "beatFill")
 
     Column(
         modifier
             .height(64.dp)
-            .clip(outer)
-            .border(2.dp, c.scrim, outer)
             .pointerInput(Unit) {
                 val threshold = 18.dp.toPx()
-                // One gesture = finger down … finger up. Far enough vertically = swipe, else tap.
+                // One gesture = finger down ... finger up. Far enough vertically = swipe, else tap.
                 awaitEachGesture {
                     awaitFirstDown()
                     var dy = 0f
@@ -107,7 +106,7 @@ private fun BeatBlock(
                             if (abs(dy) > threshold) {
                                 swiped = true
                                 swipe(dy < 0) // screen y grows downward, so negative = up
-                                haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                                tick()
                             }
                         }
                         change.consume()
@@ -115,21 +114,24 @@ private fun BeatBlock(
                     }
                     if (!swiped) {
                         tap()
-                        haptics.performHapticFeedback(HapticFeedbackType.SegmentTick)
+                        tick()
                     }
                 }
-            }
+            },
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        // Top segment = level 3, bottom = level 1.
+        // Three separate segments with gaps between them, so the level reads as
+        // stacked bars even when all three are filled. Top = level 3.
         for (seg in 3 downTo 1) {
+            val shape = RoundedCornerShape(6.dp)
             Box(
                 Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .padding(horizontal = 0.dp)
+                    .clip(shape)
                     .background(if (state.level >= seg) fill else Color.Transparent)
+                    .border(2.dp, if (playing && state.level >= seg) fill else c.ink, shape)
             )
-            if (seg > 1) Box(Modifier.fillMaxWidth().height(2.dp).background(c.scrim))
         }
     }
 }

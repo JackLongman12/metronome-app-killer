@@ -20,8 +20,9 @@ import androidx.compose.ui.graphics.Color
 
 private fun dark(
     bg: Long, card: Long, variant: Long, text: Long, muted: Long,
-    accent: Long, onAccent: Long, accentSoft: Long, line: Long, lineSoft: Long,
+    accent: Long, onAccent: Long, accentSoft: Long, line: Long, lineSoft: Long, ink: Long,
 ) = darkColorScheme(
+    surfaceContainerLowest = Color(ink),
     primary = Color(accent), onPrimary = Color(onAccent),
     primaryContainer = Color(accentSoft), onPrimaryContainer = Color(text),
     background = Color(bg), onBackground = Color(text),
@@ -34,8 +35,9 @@ private fun dark(
 
 private fun light(
     bg: Long, card: Long, variant: Long, text: Long, muted: Long,
-    accent: Long, onAccent: Long, accentSoft: Long, line: Long, lineSoft: Long,
+    accent: Long, onAccent: Long, accentSoft: Long, line: Long, lineSoft: Long, ink: Long,
 ) = lightColorScheme(
+    surfaceContainerLowest = Color(ink),
     primary = Color(accent), onPrimary = Color(onAccent),
     primaryContainer = Color(accentSoft), onPrimaryContainer = Color(text),
     background = Color(bg), onBackground = Color(text),
@@ -48,19 +50,19 @@ private fun light(
 
 // Studio: warm dark grey with a teal accent, like a piece of studio hardware.
 private val StudioScheme = dark(0xFF2A2A2C, 0xFF333335, 0xFF2F2F31, 0xFFF2F2F2, 0xFF9A9A9E,
-    0xFF1FB8A6, 0xFF00201C, 0xFF17413C, 0xFF5A5A5E, 0xFF3A3A3D)
+    0xFF1FB8A6, 0xFF00201C, 0xFF17413C, 0xFF5A5A5E, 0xFF3A3A3D, 0xFF111112)
 private val GraphiteScheme = dark(0xFF0F1115, 0xFF16191E, 0xFF1B1E24, 0xFFE8EAED, 0xFF9AA0A6,
-    0xFF4C8DFF, 0xFF001A40, 0xFF22324F, 0xFF3A3F47, 0xFF262A31)
+    0xFF4C8DFF, 0xFF001A40, 0xFF22324F, 0xFF3A3F47, 0xFF262A31, 0xFF4A5160)
 private val OledScheme = dark(0xFF000000, 0xFF0A0A0A, 0xFF141414, 0xFFF2F2F2, 0xFF8A8A8A,
-    0xFFB8F35A, 0xFF1A2600, 0xFF2C3A14, 0xFF333333, 0xFF1F1F1F)
+    0xFFB8F35A, 0xFF1A2600, 0xFF2C3A14, 0xFF333333, 0xFF1F1F1F, 0xFF4A4A4A)
 private val PaperScheme = light(0xFFF4F2ED, 0xFFFFFFFF, 0xFFE9E6DF, 0xFF1C1B1A, 0xFF6B6862,
-    0xFF2F6B57, 0xFFFFFFFF, 0xFFD6E6DF, 0xFFC9C5BC, 0xFFDDD9D0)
+    0xFF2F6B57, 0xFFFFFFFF, 0xFFD6E6DF, 0xFFC9C5BC, 0xFFDDD9D0, 0xFF2C2B29)
 private val SlateScheme = dark(0xFF151A1F, 0xFF1A2026, 0xFF1F262D, 0xFFE6ECEF, 0xFF93A1AB,
-    0xFF2EC4B6, 0xFF00201D, 0xFF173B39, 0xFF3A4651, 0xFF27313A)
+    0xFF2EC4B6, 0xFF00201D, 0xFF173B39, 0xFF3A4651, 0xFF27313A, 0xFF4A5865)
 private val WarmLight = light(0xFFF7F7F5, 0xFFFFFFFF, 0xFFECECE8, 0xFF1B1B1B, 0xFF66665F,
-    0xFFD9512C, 0xFFFFFFFF, 0xFFFBE1D8, 0xFFC9C9C3, 0xFFE2E2DD)
+    0xFFD9512C, 0xFFFFFFFF, 0xFFFBE1D8, 0xFFC9C9C3, 0xFFE2E2DD, 0xFF2B2B2B)
 private val WarmDark = dark(0xFF111214, 0xFF1A1B1E, 0xFF26272A, 0xFFEDEDEA, 0xFFA3A39D,
-    0xFFFF7A52, 0xFF2A0C02, 0xFF4A2014, 0xFF45474B, 0xFF2E3033)
+    0xFFFF7A52, 0xFF2A0C02, 0xFF4A2014, 0xFF45474B, 0xFF2E3033, 0xFF55575C)
 
 /** The selectable colour schemes (Settings → Appearance). [swatch] is for the picker. */
 enum class AppColors(val label: String, val swatchBg: Color, val swatchAccent: Color) {
@@ -89,6 +91,14 @@ enum class AppColors(val label: String, val swatchBg: Color, val swatchAccent: C
         WARM -> if (isSystemInDarkTheme()) WarmDark else WarmLight
     }
 }
+
+/**
+ * "Ink": the strong contrasting colour for beat blocks, the Create/Load switch,
+ * the Play button and the knob rim. Near-black on grey themes (like the
+ * reference), mid-grey on pure-black OLED so things stay visible.
+ * Stored in a Material slot we don't otherwise use (surfaceContainerLowest).
+ */
+val ColorScheme.ink: Color get() = surfaceContainerLowest
 
 @Composable
 fun AppTheme(colors: AppColors, content: @Composable () -> Unit) {
