@@ -1,23 +1,5 @@
 import SwiftUI
 
-/**
- * Which page is showing, and the song player if a song is open. The menu
- * shortcuts read this so Space plays the song on the song page and the
- * metronome everywhere else.
- */
-@MainActor
-final class AppState: ObservableObject {
-    @Published var section: ContentView.Section = .metronome
-    weak var songPage: SongPageControls?
-}
-
-/** What the keyboard shortcuts can do on an open song page. */
-@MainActor
-protocol SongPageControls: AnyObject {
-    func togglePlay()
-    func jumpBars(_ by: Int)
-}
-
 /** One song: part rows (or the full bar grid), play with a click, loop, speed, edit. */
 struct SongView: View {
     let song: Song
@@ -224,6 +206,7 @@ struct SongView: View {
         guard let map = song.map else { return }
         do { try player.load(path: song.path, map: map, offsetMs: song.offsetMs, skips: song.skips) }
         catch { loadError = error.localizedDescription }
+        player.title = song.title
         keys.player = player
         keys.bars = { song.map?.bars ?? [] }
         app.songPage = keys
@@ -239,6 +222,8 @@ final class SongKeys: ObservableObject, SongPageControls {
     var bars: () -> [Bar] = { [] }
 
     func togglePlay() { player?.toggle() }
+    var isPlaying: Bool { player?.playing ?? false }
+    func seek(to sec: Double) { player?.seek(to: sec) }
 
     /** ← / →: to the start of the previous / next bar. */
     func jumpBars(_ by: Int) {

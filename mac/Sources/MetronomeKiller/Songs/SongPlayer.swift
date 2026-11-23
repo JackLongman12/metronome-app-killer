@@ -25,6 +25,8 @@ final class SongPlayer: ObservableObject {
     @Published private(set) var loopRepeats = 0
     @Published var songLevel: Float = 1 { didSet { applyLevels() } }
     @Published var clickLevel: Float = 1 { didSet { applyLevels() } }
+    /** Shown in Control Center's Now Playing. */
+    var title = ""
 
     private let engine = AVAudioEngine()
     private let songNode = AVAudioPlayerNode()
@@ -59,6 +61,7 @@ final class SongPlayer: ObservableObject {
         self.skips = skips
         offset = Double(offsetMs) / 1000
         let fmt = f.processingFormat
+        AudioOutput.shared.applyTo(engine) // the device picked in Settings → Audio, if any
         // LEARN: connections carry a format (sample rate and channels). Using the
         // song's own format everywhere means nothing gets converted before mixing.
         engine.disconnectNodeOutput(songNode)
@@ -96,12 +99,19 @@ final class SongPlayer: ObservableObject {
         position = currentTime()
         halt()
         playing = false
+        tellNowPlaying()
     }
 
     func stop() {
+        let was = playing
         halt()
         playing = false
         engine.stop()
+        if was { tellNowPlaying() }
+    }
+
+    private func tellNowPlaying() {
+        NowPlaying.song(title: title, playing: playing, position: position, duration: duration, rate: speed)
     }
 
     func seek(to sec: Double) {
@@ -113,6 +123,7 @@ final class SongPlayer: ObservableObject {
     func setSpeed(_ f: Float) {
         speed = f.clamped(0.5, 1)
         timePitch.rate = speed
+        if playing { tellNowPlaying() }
     }
 
     func setLoop(_ start: Double, _ end: Double) {
@@ -165,6 +176,7 @@ final class SongPlayer: ObservableObject {
         position = sec
         playing = true
         startTicker()
+        tellNowPlaying()
     }
 
     /** Song position now: where we started plus how far the song player has got. */

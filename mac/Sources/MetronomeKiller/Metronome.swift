@@ -19,7 +19,14 @@ final class Metronome: ObservableObject {
     @Published private(set) var currentBeat = -1
     @Published private(set) var latencyMs: Double = 0
 
+    /**
+     * Called on the main thread when a new bar's "1" is heard (count-in bars
+     * included). Practice uses it to queue the next tempo or subdivision.
+     */
+    var onBar: (() -> Void)?
+
     private var poller: Timer?
+    private var lastSeq: Int64 = -1
     private var taps: [Int64] = []
     private var saveWork: DispatchWorkItem?
 
@@ -80,6 +87,24 @@ final class Metronome: ObservableObject {
     func setSound(_ sound: ClickSound) { edit { $0.sound = sound } }
     func setVolume(_ v: Float) { edit { $0.volume = v } }
 
+    /** Load saved settings (a setlist item). Your volume stays as it is. */
+    func apply(_ s: MetronomeSettings) {
+        edit { cur in
+            let vol = cur.volume
+            cur = s
+            cur.volume = vol
+        }
+    }
+
+    /**
+     * Timing check: how far a tap at [tapNs] was from the nearest click as you
+     * heard it, in ms (− early, + late), or nil if no click is known.
+     */
+    func tapOffsetMs(_ tapNs: Int64) -> Double? {
+        let d = mk_nearest_beat_offset(tapNs)
+        return d == Int64.min ? nil : Double(d) / 1e6
+    }
+
     /** Plays one hit so you can hear a sound before picking it. */
     func preview(_ sound: ClickSound) {
         if !playing { _ = mk_start(false) }
@@ -110,6 +135,7 @@ final class Metronome: ObservableObject {
         guard mk_start(true) else { return }
         playing = true
         latencyMs = mk_output_latency_ms()
+        lastSeq = -1
         startPoller()
     }
 
@@ -145,8 +171,15 @@ final class Metronome: ObservableObject {
             let packed = mk_audible_beat(mk_now_ns(), 0)
             guard packed >= 0 else { return }
             let index = Int(packed & 0xF)
+            let seq = packed >> 8
             Task { @MainActor in
-                if let self, index != self.currentBeat { self.currentBeat = index }
+                guard let self, self.playing else { return }
+                if index != self.currentBeat { self.currentBeat = index }
+                // A new beat that is a "1": tell whoever listens (Practice).
+                if seq != self.lastSeq {
+                    self.lastSeq = seq
+                    if index == 0 { self.onBar?() }
+                }
             }
         }
         // .common keeps it ticking while you drag a slider or hold a menu open.

@@ -10,6 +10,7 @@
 #include <mach/mach_time.h>
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <limits>
 
 namespace {
@@ -230,6 +231,30 @@ static AudioDeviceID defaultOutputDevice() {
     return dev;
 }
 
+static bool deviceAlive(AudioDeviceID dev) {
+    UInt32 v = 0, size = sizeof(v);
+    AudioObjectPropertyAddress a{kAudioDevicePropertyDeviceIsAlive, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain};
+    return AudioObjectGetPropertyData(dev, &a, 0, nullptr, &size, &v) == noErr && v != 0;
+}
+
+static int outputChannels(AudioDeviceID dev) {
+    AudioObjectPropertyAddress a{kAudioDevicePropertyStreamConfiguration, kAudioObjectPropertyScopeOutput, kAudioObjectPropertyElementMain};
+    UInt32 size = 0;
+    if (AudioObjectGetPropertyDataSize(dev, &a, 0, nullptr, &size) != noErr || size == 0) return 0;
+    std::vector<uint8_t> mem(size);
+    auto* list = reinterpret_cast<AudioBufferList*>(mem.data());
+    if (AudioObjectGetPropertyData(dev, &a, 0, nullptr, &size, list) != noErr) return 0;
+    int n = 0;
+    for (UInt32 i = 0; i < list->mNumberBuffers; ++i) n += static_cast<int>(list->mBuffers[i].mNumberChannels);
+    return n;
+}
+
+AudioDeviceID ClickEngine::currentDevice() {
+    const AudioDeviceID want = outputDevice_.load();
+    if (want != 0 && deviceAlive(want) && outputChannels(want) > 0) return want;
+    return defaultOutputDevice();
+}
+
 static UInt32 deviceUInt(AudioDeviceID dev, AudioObjectPropertySelector sel) {
     UInt32 v = 0, size = sizeof(v);
     AudioObjectPropertyAddress a{sel, kAudioObjectPropertyScopeOutput, kAudioObjectPropertyElementMain};
@@ -240,7 +265,7 @@ static UInt32 deviceUInt(AudioDeviceID dev, AudioObjectPropertySelector sel) {
 // How many frames sit between "we hand the sound over" and "it leaves the speaker":
 // the device's own latency, its safety offset, and the output stream's latency.
 void ClickEngine::measureLatency() {
-    const AudioDeviceID dev = defaultOutputDevice();
+    const AudioDeviceID dev = currentDevice();
     if (dev == kAudioObjectUnknown) return;
     UInt32 frames = deviceUInt(dev, kAudioDevicePropertyLatency) + deviceUInt(dev, kAudioDevicePropertySafetyOffset);
     AudioStreamID streams[8];
@@ -266,26 +291,75 @@ static OSStatus outputChanged(AudioObjectID, UInt32, const AudioObjectPropertyAd
 
 void ClickEngine::onOutputChanged() { measureLatency(); }
 
+// Called by macOS when a device is plugged in or out. If you picked an audio
+// interface and unplug it, the click moves to the Mac's default output; when it
+// comes back, the click moves back to it.
+static OSStatus devicesChanged(AudioObjectID, UInt32, const AudioObjectPropertyAddress*, void* ref) {
+    static_cast<ClickEngine*>(ref)->onDevicesChanged();
+    return noErr;
+}
+
+void ClickEngine::onDevicesChanged() {
+    // Only reopen when the device we should be on is not the one we're on.
+    if (outputDevice_.load() == 0 || !running_.load()) return;
+    if (currentDevice() == usingDevice_.load()) return;
+    setOutput(outputDevice_.load(), outputChannel_.load());
+}
+
+void ClickEngine::setOutput(uint32_t device, int firstChannel) {
+    std::lock_guard<std::mutex> g(lock_);
+    outputDevice_.store(device);
+    outputChannel_.store(firstChannel < 0 ? 0 : firstChannel);
+    if (!running_.load()) return;
+    // Reopen on the new output. Playing carries on (from beat 1).
+    closeUnit();
+    if (!openUnit()) running_.store(false);
+}
+
 OSStatus ClickEngine::renderThunk(void* ref, AudioUnitRenderActionFlags*, const AudioTimeStamp* ts,
                                   UInt32, UInt32 frames, AudioBufferList* io) {
     auto* self = static_cast<ClickEngine*>(ref);
-    self->render(ts, static_cast<float*>(io->mBuffers[0].mData), static_cast<int>(frames));
+    auto* left = static_cast<float*>(io->mBuffers[0].mData);
+    self->render(ts, left, static_cast<int>(frames));
+    // The click is mono: copy it to the second channel (memcpy is safe in the audio thread).
+    for (UInt32 b = 1; b < io->mNumberBuffers; ++b) memcpy(io->mBuffers[b].mData, left, frames * sizeof(float));
     return noErr;
 }
 
 bool ClickEngine::openUnit() {
     // LEARN: the "default output" unit always plays to whatever output the Mac
     // is set to (speakers, headphones, an interface) and follows it when you switch.
+    // If you picked a particular output (Settings → Audio), we use the "HAL
+    // output" unit instead, which plays to one named device.
+    const AudioDeviceID dev = currentDevice();
+    const bool chosen = outputDevice_.load() != 0 && dev == outputDevice_.load();
+    usingDevice_.store(dev);
     AudioComponentDescription d{};
     d.componentType = kAudioUnitType_Output;
-    d.componentSubType = kAudioUnitSubType_DefaultOutput;
+    d.componentSubType = chosen ? kAudioUnitSubType_HALOutput : kAudioUnitSubType_DefaultOutput;
     d.componentManufacturer = kAudioUnitManufacturer_Apple;
     AudioComponent comp = AudioComponentFindNext(nullptr, &d);
     if (!comp || AudioComponentInstanceNew(comp, &unit_) != noErr) { unit_ = nullptr; return false; }
+    if (chosen) {
+        AudioDeviceID id = dev;
+        AudioUnitSetProperty(unit_, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0, &id, sizeof(id));
+        // LEARN — channel map: one number per output channel of the device,
+        // saying which of OUR channels plays there (-1 = silence). So on an
+        // interface with 4 outputs and the click on 3-4 the map is [-1, -1, 0, 1].
+        const int n = outputChannels(dev);
+        if (n > 0) {
+            std::vector<SInt32> map(n, -1);
+            int first = outputChannel_.load();
+            if (first >= n) first = 0;
+            map[first] = 0;
+            if (first + 1 < n) map[first + 1] = 1;
+            AudioUnitSetProperty(unit_, kAudioOutputUnitProperty_ChannelMap, kAudioUnitScope_Input, 0,
+                                 map.data(), static_cast<UInt32>(map.size() * sizeof(SInt32)));
+        }
+    }
 
     // Low latency: ask the device for small buffers (128 frames ≈ 2.7 ms at 48 kHz).
     // macOS gives each app its own buffer size, so this doesn't affect other apps.
-    const AudioDeviceID dev = defaultOutputDevice();
     if (dev != kAudioObjectUnknown) {
         UInt32 want = 128;
         AudioObjectPropertyAddress a{kAudioDevicePropertyBufferFrameSize, kAudioObjectPropertyScopeOutput, kAudioObjectPropertyElementMain};
@@ -304,7 +378,7 @@ bool ClickEngine::openUnit() {
     f.mSampleRate = rate;
     f.mFormatID = kAudioFormatLinearPCM;
     f.mFormatFlags = kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked | kAudioFormatFlagIsNonInterleaved;
-    f.mChannelsPerFrame = 1;   // mono: macOS copies it to both speakers
+    f.mChannelsPerFrame = 2;   // stereo, both channels the same (see renderThunk)
     f.mBitsPerChannel = 32;
     f.mBytesPerFrame = 4;
     f.mFramesPerPacket = 1;
@@ -322,6 +396,10 @@ bool ClickEngine::openUnit() {
     if (!listening_) {
         AudioObjectPropertyAddress a{kAudioHardwarePropertyDefaultOutputDevice, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain};
         listening_ = AudioObjectAddPropertyListener(kAudioObjectSystemObject, &a, outputChanged, this) == noErr;
+    }
+    if (!devListening_) {
+        AudioObjectPropertyAddress a{kAudioHardwarePropertyDevices, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain};
+        devListening_ = AudioObjectAddPropertyListener(kAudioObjectSystemObject, &a, devicesChanged, this) == noErr;
     }
 
     if (AudioUnitInitialize(unit_) != noErr || AudioOutputUnitStart(unit_) != noErr) {
@@ -516,6 +594,18 @@ int64_t ClickEngine::frameToNs(int64_t frame) {
     return t0 + static_cast<int64_t>((frame - f0 + latencyFrames_.load()) * 1e9 / sr);
 }
 
+bool ClickEngine::newestBeat(int64_t* count, int64_t* ns) {
+    const int64_t n = ringCount_.load(std::memory_order_acquire);
+    if (n == 0) return false;
+    const int64_t f = ring_[(n - 1) % kRingSize].frame.load(std::memory_order_relaxed);
+    if (f < 0) return false;
+    const int64_t t = frameToNs(f);
+    if (t == std::numeric_limits<int64_t>::min()) return false;
+    *count = n;
+    *ns = t;
+    return true;
+}
+
 double ClickEngine::outputLatencyMs() const {
     if (!running_.load()) return 0.0;
     return (bufferFrames_.load() + latencyFrames_.load()) * 1000.0 / sampleRate_.load();
@@ -573,10 +663,11 @@ double ClickEngine::benchRender(int frames, int iterations) {
 }
 
 // ── C functions for Swift ───────────────────────────────────────────────────
-static ClickEngine* engine() {
+ClickEngine* mk_engine() {
     static ClickEngine e;
     return &e;
 }
+static ClickEngine* engine() { return mk_engine(); }
 
 extern "C" {
 bool mk_start(bool clicks) { return engine()->start(clicks); }
@@ -603,3 +694,37 @@ int64_t mk_nearest_beat_offset(int64_t tapNs) { return engine()->nearestBeatOffs
 double mk_output_latency_ms(void) { return engine()->outputLatencyMs(); }
 double mk_bench_render(int frames, int iterations) { return engine()->benchRender(frames, iterations); }
 }
+
+// ── Output devices (Settings → Audio) ───────────────────────────────────────
+void mk_set_output(uint32_t device, int firstChannel) { engine()->setOutput(device, firstChannel); }
+
+int mk_output_devices(uint32_t* ids, int max) {
+    AudioObjectPropertyAddress a{kAudioHardwarePropertyDevices, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain};
+    UInt32 size = 0;
+    if (AudioObjectGetPropertyDataSize(kAudioObjectSystemObject, &a, 0, nullptr, &size) != noErr) return 0;
+    std::vector<AudioDeviceID> all(size / sizeof(AudioDeviceID));
+    if (AudioObjectGetPropertyData(kAudioObjectSystemObject, &a, 0, nullptr, &size, all.data()) != noErr) return 0;
+    int n = 0;
+    for (AudioDeviceID d : all) {
+        if (outputChannels(d) <= 0) continue;   // microphones and other input-only devices
+        if (n < max) ids[n] = d;
+        ++n;
+    }
+    return n < max ? n : max;
+}
+
+static void cfString(AudioDeviceID dev, AudioObjectPropertySelector sel, char* buf, int len) {
+    if (len <= 0) return;
+    buf[0] = 0;
+    CFStringRef s = nullptr;
+    UInt32 size = sizeof(s);
+    AudioObjectPropertyAddress a{sel, kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain};
+    if (AudioObjectGetPropertyData(dev, &a, 0, nullptr, &size, &s) != noErr || !s) return;
+    CFStringGetCString(s, buf, len, kCFStringEncodingUTF8);
+    CFRelease(s);
+}
+
+void mk_device_name(uint32_t device, char* buf, int len) { cfString(device, kAudioObjectPropertyName, buf, len); }
+void mk_device_uid(uint32_t device, char* buf, int len) { cfString(device, kAudioDevicePropertyDeviceUID, buf, len); }
+int mk_device_channels(uint32_t device) { return outputChannels(device); }
+uint32_t mk_default_output(void) { return defaultOutputDevice(); }

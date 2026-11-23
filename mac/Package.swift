@@ -22,6 +22,7 @@ let package = Package(
             linkerSettings: [
                 .linkedFramework("AudioToolbox"),
                 .linkedFramework("CoreAudio"),
+                .linkedFramework("CoreMIDI"),
             ]
         ),
         // Loads ONNX Runtime (downloaded on first song analysis) to run the beat model.
@@ -34,7 +35,8 @@ let package = Package(
         .executableTarget(
             name: "MetronomeKiller",
             dependencies: ["ClickCore", "OrtShim"],
-            path: "Sources/MetronomeKiller"
+            path: "Sources/MetronomeKiller",
+            linkerSettings: [.linkedFramework("MediaPlayer")]
         ),
     ],
     cxxLanguageStandard: .cxx17

@@ -4,14 +4,16 @@ import UniformTypeIdentifiers
 /** The Songs page: paste a link or add files; click a song to open it. */
 struct SongsView: View {
     @EnvironmentObject private var library: SongLibrary
+    @EnvironmentObject private var app: AppState
     @State private var link = ""
-    @State private var open: String?          // id of the song being shown
     @State private var tabFor: Song?
     @State private var dropping = false
 
     var body: some View {
-        if let id = open, let song = library.song(id) {
-            SongView(song: song) { open = nil }
+        if let id = app.openSong, let song = library.song(id) {
+            // LEARN: .id gives each song its own page (and its own player), so
+            // opening another song from a setlist starts fresh.
+            SongView(song: song) { app.openSong = nil }.id(song.id)
         } else {
             list
         }
@@ -43,7 +45,7 @@ struct SongsView: View {
                     ForEach(library.songs) { s in
                         SongRow(song: s)
                             .contentShape(Rectangle())
-                            .onTapGesture { if s.map != nil { open = s.id } }
+                            .onTapGesture { if s.map != nil { app.openSong = s.id } }
                             .contextMenu {
                                 if s.map != nil { Button("Use a Songsterr tab…") { tabFor = s } }
                                 Button("Analyse again") { library.analyseAgain(s.id) }

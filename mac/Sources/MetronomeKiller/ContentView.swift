@@ -24,6 +24,7 @@ struct ContentView: View {
                     Text("↑ ↓  tempo")
                     Text("T  tap")
                     Text("← →  bars (songs)")
+                    Text("PgDn PgUp  setlist")
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -33,26 +34,15 @@ struct ContentView: View {
         } detail: {
             VStack(spacing: 0) {
                 UpdateBanner()
+                if app.section == .metronome || app.section == .songs { SetlistStrip() }
                 switch app.section {
                 case .metronome: MetronomeView()
                 case .songs: SongsView()
-                default: ComingSoon(name: app.section.rawValue)
+                case .practice: PracticeView()
+                case .setlists: SetlistsView()
                 }
             }
         }
-    }
-}
-
-/** Sections that aren't on the Mac yet. */
-struct ComingSoon: View {
-    let name: String
-    var body: some View {
-        VStack(spacing: 8) {
-            Image(systemName: "hammer").font(.system(size: 28)).foregroundStyle(.secondary)
-            Text("\(name) is coming in the next Mac builds").font(.headline)
-            Text("The app updates itself when it's ready.").foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

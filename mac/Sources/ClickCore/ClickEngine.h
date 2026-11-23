@@ -65,6 +65,19 @@ public:
     /** Benchmark: renders [iterations] buffers of [frames] offline (no sound); returns ns per buffer. */
     double benchRender(int frames, int iterations);
     void onOutputChanged();
+    void onDevicesChanged();
+
+    /**
+     * Which output to play on. device 0 = whatever the Mac's default output is
+     * (it follows System Settings). firstChannel = the first of the two output
+     * channels the click goes to (0 = channels 1-2, 2 = channels 3-4...).
+     */
+    void setOutput(uint32_t device, int firstChannel);
+
+    // For the MIDI clock (Midi.cpp): the newest beat made so far, and when it'll be heard.
+    bool newestBeat(int64_t* count, int64_t* ns);
+    double beatRate() const { return bpm_.load(); }
+    bool clicking() const { return running_.load() && clicksEnabled_.load(); }
 
 private:
     struct Event {
@@ -85,6 +98,11 @@ private:
     std::mutex lock_;
     AudioUnit unit_ = nullptr;
     bool listening_ = false;
+    bool devListening_ = false;
+    std::atomic<uint32_t> outputDevice_{0};   // 0 = the Mac's default output
+    std::atomic<int> outputChannel_{0};
+    std::atomic<uint32_t> usingDevice_{0};
+    AudioDeviceID currentDevice();             // the chosen device if it's plugged in, else the default
     std::atomic<bool> running_{false};
     std::atomic<int> sampleRate_{48000};
     std::atomic<int> bufferFrames_{128};
@@ -151,3 +169,6 @@ private:
     Event ring_[kRingSize];
     std::atomic<int64_t> ringCount_{0};
 };
+
+/** The one engine the whole app shares (MIDI clock reads it too). */
+ClickEngine* mk_engine();
