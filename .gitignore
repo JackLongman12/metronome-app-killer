@@ -24,3 +24,7 @@ tools/beat-lab/bench/
 tools/beat-lab/models/
 tools/beat-lab/.venv-*/
 tools/beat-lab/explore_this_src/
+
+# Mac app build output
+mac/.build/
+mac/build/

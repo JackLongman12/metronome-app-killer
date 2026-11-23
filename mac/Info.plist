@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- The app's ID card: name, version, minimum macOS. build.sh fills in __BUILD__ and __REPO__. -->
+<plist version="1.0">
+<dict>
+    <key>CFBundleIdentifier</key><string>com.metronomekiller.mac</string>
+    <key>CFBundleName</key><string>Metronome Killer</string>
+    <key>CFBundleDisplayName</key><string>Metronome Killer</string>
+    <key>CFBundleExecutable</key><string>MetronomeKiller</string>
+    <key>CFBundlePackageType</key><string>APPL</string>
+    <key>CFBundleShortVersionString</key><string>0.1.__BUILD__</string>
+    <key>CFBundleVersion</key><string>__BUILD__</string>
+    <key>LSMinimumSystemVersion</key><string>13.0</string>
+    <key>LSApplicationCategoryType</key><string>public.app-category.music</string>
+    <key>NSHighResolutionCapable</key><true/>
+    <key>NSSupportsAutomaticTermination</key><false/>
+    <key>GitHubRepo</key><string>__REPO__</string>
+</dict>
+</plist>

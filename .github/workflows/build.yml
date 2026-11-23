@@ -9,6 +9,9 @@ on:
     paths-ignore:
       - "**.md"
       - "tools/**"
+      # The Mac app has its own workflow (mac.yml).
+      - "mac/**"
+      - ".github/workflows/mac.yml"
   workflow_dispatch:
 
 permissions:

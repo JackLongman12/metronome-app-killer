@@ -1,0 +1,52 @@
+name: Mac build and release
+
+# Every push to main that touches the Mac app builds it on a GitHub Mac and
+# publishes a Release tagged mac-b<run number>, with a .dmg (for people) and a
+# .zip (for the in-app updater). It's never marked "latest", so the Android
+# app's updater (which reads the latest release) only ever sees Android builds.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "mac/**"
+      - "app/src/main/assets/sounds/**"
+      - ".github/workflows/mac.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mac-release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: macos-15
+    env:
+      BUILD_NUMBER: ${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Build the app
+        run: sh mac/build.sh
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PREV=$(git describe --tags --abbrev=0 --match 'mac-b*' 2>/dev/null || true)
+          if [ -n "$PREV" ]; then
+            NOTES=$(git log --no-merges --pretty='- %s' "$PREV..HEAD" -- mac app/src/main/assets/sounds)
+          else
+            NOTES="First Mac build."
+          fi
+          gh release create "mac-b${BUILD_NUMBER}" \
+            "mac/build/MetronomeKiller-mac-b${BUILD_NUMBER}.dmg" \
+            "mac/build/MetronomeKiller-mac-b${BUILD_NUMBER}.zip" \
+            --title "Mac build ${BUILD_NUMBER}" \
+            --notes "$NOTES" \
+            --target "$GITHUB_SHA" \
+            --latest=false
