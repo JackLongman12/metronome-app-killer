@@ -41,6 +41,11 @@ int mk_ort_open(const char* dylibPath, const char* modelPath, int threads, char*
     CHECK(api->CreateSessionOptions(&opts));
     CHECK(api->SetIntraOpNumThreads(opts, threads));
     CHECK(api->SetSessionGraphOptimizationLevel(opts, ORT_ENABLE_ALL));
+    // LEARN: by default ONNX Runtime keeps a big memory pool ("arena") and reuses
+    // it for speed. For one song every few minutes, giving memory back matters
+    // more: these two settings cut peak memory a lot, at almost no speed cost.
+    CHECK(api->DisableCpuMemArena(opts));
+    CHECK(api->DisableMemPattern(opts));
     CHECK(api->CreateSession(env, modelPath, opts, &session));
     api->ReleaseSessionOptions(opts);
 
@@ -58,7 +63,7 @@ int mk_ort_open(const char* dylibPath, const char* modelPath, int threads, char*
 int mk_ort_run(const float* audio, int64_t length, float** beat, float** down, int64_t* frames, char* err, int errLen) {
     if (!session) { snprintf(err, (size_t)errLen, "model not loaded"); return -1; }
     OrtMemoryInfo* mem = NULL;
-    CHECK(api->CreateCpuMemoryInfo(OrtArenaAllocator, OrtMemTypeDefault, &mem));
+    CHECK(api->CreateCpuMemoryInfo(OrtDeviceAllocator, OrtMemTypeDefault, &mem));
     int64_t shape[2] = {1, length};
     OrtValue* input = NULL;
     CHECK(api->CreateTensorWithDataAsOrtValue(mem, (void*)audio, (size_t)length * sizeof(float), shape, 2,

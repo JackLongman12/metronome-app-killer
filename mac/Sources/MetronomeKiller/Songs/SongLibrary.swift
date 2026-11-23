@@ -96,10 +96,15 @@ final class SongLibrary: ObservableObject {
     /** Add audio files from the Mac (Open… or dropped on the window). */
     func add(files: [URL]) {
         for url in files {
-            let (title, artist) = Self.describe(url)
-            let s = Song(id: UUID().uuidString, title: title, artist: artist, path: url.path, addedAt: Date())
+            let s = Song(id: UUID().uuidString, title: url.deletingPathExtension().lastPathComponent, artist: "", path: url.path, addedAt: Date())
             songs.insert(s, at: 0)
-            analyse(s.id)
+            // Read the real title and artist from the file's tags (that takes a moment), then analyse.
+            Task {
+                let (title, artist) = await Self.describe(url)
+                update(s.id) { if let title { $0.title = title }; $0.artist = artist }
+                save()
+                analyse(s.id)
+            }
         }
         save()
     }
@@ -330,15 +335,15 @@ final class SongLibrary: ObservableObject {
         if let data = try? JSONEncoder().encode(songs) { try? data.write(to: index, options: .atomic) }
     }
 
-    /** Title and artist from the file's tags, else its name. */
-    private static func describe(_ url: URL) -> (String, String) {
+    /** Title and artist from the file's tags (nil title = keep the file name). */
+    private static func describe(_ url: URL) async -> (String?, String) {
         var title: String?, artist: String?
-        let asset = AVURLAsset(url: url)
-        for item in asset.commonMetadata {
-            if item.commonKey == .commonKeyTitle { title = item.stringValue }
-            if item.commonKey == .commonKeyArtist { artist = item.stringValue }
+        let items = (try? await AVURLAsset(url: url).load(.commonMetadata)) ?? []
+        for item in items {
+            if item.commonKey == .commonKeyTitle { title = try? await item.load(.stringValue) }
+            if item.commonKey == .commonKeyArtist { artist = try? await item.load(.stringValue) }
         }
-        return (title?.isEmpty == false ? title! : url.deletingPathExtension().lastPathComponent, artist ?? "")
+        return (title?.isEmpty == false ? title : nil, artist ?? "")
     }
 }
 

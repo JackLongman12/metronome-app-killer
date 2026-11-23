@@ -21,8 +21,17 @@ After that it opens normally. It checks GitHub for a new version every time it o
 ## What's here so far
 
 - The metronome: odd, decimal and irrational time signatures, accents, subdivisions, 14 sounds (6 recorded), tap tempo, and keyboard shortcuts (Space, ↑/↓, Shift+↑/↓, T).
+- Songs:
+  - Paste a YouTube, Spotify or Songsterr link (playlists too), or drop audio files on the window.
+  - The app finds every beat and bar, plays the song with a click locked to it, and reads part names from Songsterr tabs.
+  - Part rows or the full grid, looping a row, the Speed up loop, 50–100 % speed, song and click volume, timing nudge, and Edit mode.
+  - ← and → move by one bar.
+- Downloaded on first use, into the app's own folder (so Uninstall removes them):
+  - For analysis: ONNX Runtime (13 MB, MIT) and the beat model (28 MB).
+  - For links: yt-dlp (37 MB, updates itself) and QuickJS (1.4 MB), which yt-dlp needs for YouTube.
+  - YouTube audio is saved as AAC (.m4a), because macOS can't decode YouTube's Opus files without extra software.
 - Self-update and clean uninstall.
-- Songs (YouTube downloads built in, tempo maps), Practice and Setlists are coming next.
+- Practice and Setlists are coming next.
 
 ## Building
 

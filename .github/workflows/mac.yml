@@ -45,12 +45,17 @@ jobs:
             echo "STAT app_on_disk_kb $(du -sk "$APP" | cut -f1)"
             echo "STAT program_kb $(( $(stat -f%z "$BIN") / 1024 ))"
             "$BIN" --benchmark || echo "STAT benchmark failed"
+            # The very first launch of a new download includes macOS's one-time security scan.
+            MK_LAUNCH_PROBE=1 "$BIN" | grep STAT | sed 's/launch_ms/launch_first_ms/' || true
             MK_LAUNCH_PROBE=1 "$BIN" | grep STAT || echo "STAT launch_ms unavailable"
-            # Idle: open the app, leave it alone for 10 s, then read its memory and CPU time.
+            # Idle: open the app, let it settle for 5 s, then measure CPU used over the next 10 s.
             "$BIN" & PID=$!
+            sleep 5
+            A=$(ps -o time= -p $PID | awk -F'[:.]' '{print ($1*60+$2)*100+$3}')
             sleep 10
+            B=$(ps -o time= -p $PID | awk -F'[:.]' '{print ($1*60+$2)*100+$3}')
+            echo "STAT idle_cpu_percent $(echo "$A $B" | awk '{printf "%.2f", ($2-$1)/10}')"
             echo "STAT idle_memory_mb $(( $(ps -o rss= -p $PID) / 1024 ))"
-            echo "STAT idle_cpu_time_10s $(ps -o time= -p $PID | tr -d ' ')"
             kill $PID || true
           } 2>&1 | tee bench.txt
           { echo "### Mac build ${BUILD_NUMBER}: measurements"; echo '```'; grep STAT bench.txt | sed 's/^STAT //'; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
