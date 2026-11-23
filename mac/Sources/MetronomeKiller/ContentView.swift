@@ -10,12 +10,11 @@ struct ContentView: View {
         }
     }
 
-    @State private var section: Section = .metronome
-    @EnvironmentObject private var updater: Updater
+    @EnvironmentObject private var app: AppState
 
     var body: some View {
         NavigationSplitView {
-            List(Section.allCases, selection: $section) { s in
+            List(Section.allCases, selection: Binding(get: { app.section }, set: { if let s = $0 { app.section = s } })) { s in
                 Label(s.rawValue, systemImage: s.icon).tag(s)
             }
             .navigationSplitViewColumnWidth(170)
@@ -24,6 +23,7 @@ struct ContentView: View {
                     Text("Space  start / stop")
                     Text("↑ ↓  tempo")
                     Text("T  tap")
+                    Text("← →  bars (songs)")
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -33,9 +33,10 @@ struct ContentView: View {
         } detail: {
             VStack(spacing: 0) {
                 UpdateBanner()
-                switch section {
+                switch app.section {
                 case .metronome: MetronomeView()
-                default: ComingSoon(name: section.rawValue)
+                case .songs: SongsView()
+                default: ComingSoon(name: app.section.rawValue)
                 }
             }
         }

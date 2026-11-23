@@ -555,6 +555,23 @@ int64_t ClickEngine::nearestBeatOffset(int64_t tapNs) {
     return best;
 }
 
+double ClickEngine::benchRender(int frames, int iterations) {
+    // A busy setting: 240 BPM sixteenths with a polyrhythm on top, so clicks start often.
+    std::lock_guard<std::mutex> g(lock_);
+    if (running_.load()) return -1.0;
+    sampleRate_.store(48000);
+    buildVoices(48000);
+    resetTimeline();
+    clicksEnabled_.store(true);
+    bpm_.store(240.0); subdivision_.store(4); polyCount_.store(3);
+    std::vector<float> out(frames);
+    const int64_t t0 = nowNs();
+    for (int k = 0; k < iterations; ++k) render(nullptr, out.data(), frames);
+    const int64_t t1 = nowNs();
+    polyCount_.store(0); subdivision_.store(1); bpm_.store(120.0);
+    return static_cast<double>(t1 - t0) / iterations;
+}
+
 // ── C functions for Swift ───────────────────────────────────────────────────
 static ClickEngine* engine() {
     static ClickEngine e;
@@ -584,4 +601,5 @@ int64_t mk_now_ns(void) { return ClickEngine::nowNs(); }
 int64_t mk_audible_beat(int64_t nowNs, int64_t offsetNs) { return engine()->audibleBeat(nowNs, offsetNs); }
 int64_t mk_nearest_beat_offset(int64_t tapNs) { return engine()->nearestBeatOffset(tapNs); }
 double mk_output_latency_ms(void) { return engine()->outputLatencyMs(); }
+double mk_bench_render(int frames, int iterations) { return engine()->benchRender(frames, iterations); }
 }

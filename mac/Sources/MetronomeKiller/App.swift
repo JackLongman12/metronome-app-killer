@@ -13,15 +13,25 @@ struct MetronomeKillerApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @StateObject private var metronome = Metronome()
     @StateObject private var updater = Updater()
+    @StateObject private var library = SongLibrary()
+    @StateObject private var app = AppState()
+
+    init() {
+        // CI runs the app with --benchmark to measure speed; then it never opens a window.
+        if CommandLine.arguments.contains("--benchmark") { Benchmark.run() }
+    }
 
     var body: some Scene {
         Window("Metronome Killer", id: "main") {
             ContentView()
                 .environmentObject(metronome)
                 .environmentObject(updater)
+                .environmentObject(library)
+                .environmentObject(app)
                 .frame(minWidth: 680, minHeight: 460)
                 // Check for updates every time the app opens.
                 .task { await updater.check() }
+                .onAppear { KeyShortcuts.install(metronome, app) }
                 // Keep the audio output warm only while the app is in front.
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in metronome.setActive(true) }
                 .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in metronome.setActive(false) }
@@ -34,14 +44,52 @@ struct MetronomeKillerApp: App {
                 Button("Uninstall Metronome Killer…") { Uninstaller.confirmAndRun() }
             }
             CommandMenu("Metronome") {
-                Button(metronome.playing ? "Stop" : "Start") { metronome.togglePlay() }
-                    .keyboardShortcut(.space, modifiers: [])
-                Button("Faster") { metronome.nudge(1) }.keyboardShortcut(.upArrow, modifiers: [])
-                Button("Slower") { metronome.nudge(-1) }.keyboardShortcut(.downArrow, modifiers: [])
-                Button("Faster by 10") { metronome.nudge(10) }.keyboardShortcut(.upArrow, modifiers: .shift)
-                Button("Slower by 10") { metronome.nudge(-10) }.keyboardShortcut(.downArrow, modifiers: .shift)
-                Button("Tap Tempo") { metronome.tap() }.keyboardShortcut("t", modifiers: [])
+                // The plain-key shortcuts (Space, arrows, T) are handled by KeyShortcuts
+                // below, so they don't fire while you type in a text box. These menu
+                // items do the same things with the mouse.
+                Button(metronome.playing ? "Stop" : "Start") { KeyShortcuts.space(metronome, app) }
+                Button("Faster") { metronome.nudge(1) }
+                Button("Slower") { metronome.nudge(-1) }
+                Button("Tap Tempo") { metronome.tap() }
             }
+        }
+    }
+}
+
+/**
+ * Single-key shortcuts: Space start/stop (or play/pause the open song), ↑/↓
+ * tempo (Shift: ±10), ←/→ previous/next bar on the song page, T tap tempo.
+ *
+ * LEARN: a "local event monitor" sees every key press in our app before the
+ * window does. We skip it while a text field is being typed in (its "field
+ * editor" is an NSTextView), so Space still types a space there.
+ */
+@MainActor
+enum KeyShortcuts {
+    private static var installed = false
+
+    static func space(_ m: Metronome, _ app: AppState) {
+        if app.section == .songs, let page = app.songPage { page.togglePlay() } else { m.togglePlay() }
+    }
+
+    static func install(_ m: Metronome, _ app: AppState) {
+        guard !installed else { return }
+        installed = true
+        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { e in
+            if NSApp.keyWindow?.firstResponder is NSTextView { return e }
+            let mods = e.modifierFlags.intersection([.command, .option, .control])
+            if !mods.isEmpty { return e }
+            let shift = e.modifierFlags.contains(.shift)
+            switch e.keyCode {
+            case 49: space(m, app)                                        // Space
+            case 126: m.nudge(shift ? 10 : 1)                             // ↑
+            case 125: m.nudge(shift ? -10 : -1)                           // ↓
+            case 123: if let p = app.songPage { p.jumpBars(-1) } else { return e }  // ←
+            case 124: if let p = app.songPage { p.jumpBars(1) } else { return e }   // →
+            case 17: m.tap()                                              // T
+            default: return e
+            }
+            return nil // handled: don't also pass it on
         }
     }
 }
@@ -53,6 +101,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Don't save window state to ~/Library/Saved Application State (fewer leftover files).
         UserDefaults.standard.set(false, forKey: "NSQuitAlwaysKeepsWindows")
+        Benchmark.launchProbe()
     }
 }
 

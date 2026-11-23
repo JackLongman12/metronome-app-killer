@@ -47,6 +47,8 @@ int64_t mk_audible_beat(int64_t nowNs, int64_t offsetNs);
 int64_t mk_nearest_beat_offset(int64_t tapNs);
 /** How long a click takes from the engine to the speaker, in ms (buffer + device latency). 0 if not open. */
 double mk_output_latency_ms(void);
+/** Benchmark: ns to render one buffer of [frames] (busy pattern, offline). */
+double mk_bench_render(int frames, int iterations);
 
 #ifdef __cplusplus
 }

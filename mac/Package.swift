@@ -2,8 +2,9 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // The Mac app's build file (Swift Package Manager).
 //
-// LEARN: SwiftPM builds two "targets":
+// LEARN: SwiftPM builds three "targets":
 // - ClickCore: the C++ audio engine (the same one as Android, on CoreAudio).
+// - OrtShim: a small C bridge to ONNX Runtime, for the beat-tracking model.
 // - MetronomeKiller: the Swift app (SwiftUI screens, updater, uninstaller).
 // Swift calls the engine through the plain C functions in ClickCore.h.
 // build.sh then wraps the program into a normal double-clickable .app.
@@ -23,9 +24,16 @@ let package = Package(
                 .linkedFramework("CoreAudio"),
             ]
         ),
+        // Loads ONNX Runtime (downloaded on first song analysis) to run the beat model.
+        .target(
+            name: "OrtShim",
+            path: "Sources/OrtShim",
+            exclude: ["ort/LICENSE-onnxruntime.txt"],
+            cSettings: [.unsafeFlags(["-O2"])]
+        ),
         .executableTarget(
             name: "MetronomeKiller",
-            dependencies: ["ClickCore"],
+            dependencies: ["ClickCore", "OrtShim"],
             path: "Sources/MetronomeKiller"
         ),
     ],

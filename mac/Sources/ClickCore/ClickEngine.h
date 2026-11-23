@@ -62,6 +62,8 @@ public:
     double outputLatencyMs() const;
 
     static int64_t nowNs();
+    /** Benchmark: renders [iterations] buffers of [frames] offline (no sound); returns ns per buffer. */
+    double benchRender(int frames, int iterations);
     void onOutputChanged();
 
 private:
