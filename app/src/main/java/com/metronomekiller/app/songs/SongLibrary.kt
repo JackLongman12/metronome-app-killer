@@ -10,7 +10,9 @@ import com.metronomekiller.app.analysis.BeatModel
 import com.metronomekiller.app.analysis.BeatPipeline
 import com.metronomekiller.app.analysis.TempoMap
 import com.metronomekiller.app.analysis.TempoMapBuilder
+import com.metronomekiller.app.App
 import com.metronomekiller.app.links.Links
+import com.metronomekiller.app.links.Songsterr
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -49,6 +51,10 @@ data class Song(
     val skips: List<Pair<Double, Double>> = emptyList(),
     /** Timing nudge for this song's clicks, in ms (+ later, - earlier). */
     val offsetMs: Int = 0,
+    /** Set when a Songsterr tab was found, e.g. "Periphery – Racecar · synced". */
+    val tabInfo: String? = null,
+    /** Whether the tab's tempo map is in use (else the AI's). */
+    val usingTab: Boolean = false,
 )
 
 /**
@@ -138,13 +144,23 @@ class SongLibrary(private val context: Context) {
     fun remove(id: String) {
         val song = song(id)
         _songs.update { list -> list.filterNot { it.id == id } }
-        File(dir, "$id.json").delete()
+        listOf("$id.json", "$id.ai.json", "$id.tab.json").forEach { File(dir, it).delete() }
         // Downloaded audio belongs to us; files from the phone are left alone.
         if (song?.link != null) audioDir.listFiles { f -> f.name.startsWith(id) }?.forEach { it.delete() }
         save()
     }
 
     fun retry(id: String) = analyse(id)
+
+    /** Switch a song between the Songsterr tab's tempo map and the AI's. */
+    fun useTab(id: String, on: Boolean) {
+        val file = File(dir, if (on) "$id.tab.json" else "$id.ai.json")
+        if (!file.exists()) return
+        val map = runCatching { TempoMap.fromJson(JSONObject(file.readText())) }.getOrNull() ?: return
+        File(dir, "$id.json").writeText(file.readText())
+        _songs.update { list -> list.map { if (it.id == id) it.copy(map = map, usingTab = on) else it } }
+        save()
+    }
 
     private fun setStatus(id: String, status: SongStatus, map: TempoMap? = null) {
         _songs.update { list -> list.map { if (it.id == id) it.copy(status = status, map = map ?: it.map) else it } }
@@ -180,8 +196,28 @@ class SongLibrary(private val context: Context) {
                     val result = BeatModel.load(context).use { model ->
                         BeatPipeline.analyse(model, audio.samples) { p -> setStatus(id, SongStatus.Working("Finding the beats", p)) }
                     }
-                    val map = TempoMapBuilder.build(result.beats, result.downbeats, audio.durationSec, result.downbeatScores)
+                    val aiMap = TempoMapBuilder.build(result.beats, result.downbeats, audio.durationSec, result.downbeatScores)
+                    File(dir, "$id.ai.json").writeText(aiMap.toJson().toString())
+
+                    // Songsterr: a human-written tempo map, if this song has a synced tab.
+                    var map = aiMap
+                    var tabInfo: String? = null
+                    if (App.from(context).prefs.songsterr.value) {
+                        setStatus(id, SongStatus.Working("Looking for a Songsterr tab", 0.5f))
+                        runCatching { Songsterr.find(song.title, song.artist) }.getOrNull()?.let { tab ->
+                            val video = song.link?.let { Links.youtubeId(it) }
+                            val points = video?.let { tab.videos[it] }
+                            val tabMap = if (points != null) Songsterr.mapFromSync(tab, points, audio.durationSec)
+                            else Songsterr.mapAligned(tab, aiMap.beats, audio.durationSec)
+                            if (tabMap != null) {
+                                File(dir, "$id.tab.json").writeText(tabMap.toJson().toString())
+                                map = tabMap
+                                tabInfo = "${tab.artist} – ${tab.title} · ${if (points != null) "synced to this video" else "lined up with the audio"}"
+                            }
+                        }
+                    }
                     File(dir, "$id.json").writeText(map.toJson().toString())
+                    _songs.update { list -> list.map { if (it.id == id) it.copy(tabInfo = tabInfo, usingTab = tabInfo != null) else it } }
                     setStatus(id, SongStatus.Ready, map)
                     save()
                 } catch (e: Throwable) {
@@ -220,7 +256,8 @@ class SongLibrary(private val context: Context) {
             Song(id, o.getString("title"), o.optString("artist"), o.getString("uri"), o.getLong("addedAt"),
                 map, if (map != null) SongStatus.Ready else SongStatus.Queued,
                 link = o.optString("link").ifEmpty { null }, playlist = o.optString("playlist").ifEmpty { null },
-                skips = skips ?: emptyList(), offsetMs = o.optInt("offsetMs", 0))
+                skips = skips ?: emptyList(), offsetMs = o.optInt("offsetMs", 0),
+                tabInfo = o.optString("tabInfo").ifEmpty { null }, usingTab = o.optBoolean("usingTab"))
         }
     }.getOrDefault(emptyList())
 
@@ -229,6 +266,7 @@ class SongLibrary(private val context: Context) {
             JSONObject().put("id", it.id).put("title", it.title).put("artist", it.artist)
                 .put("uri", it.uri).put("addedAt", it.addedAt)
                 .put("offsetMs", it.offsetMs)
+                .put("tabInfo", it.tabInfo ?: "").put("usingTab", it.usingTab)
                 .put("link", it.link ?: "").put("playlist", it.playlist ?: "")
                 .put("skips", JSONArray(it.skips.map { (a, b) -> JSONArray(listOf(a, b)) }))
         })

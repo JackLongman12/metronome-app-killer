@@ -140,7 +140,8 @@ private fun SongRow(song: Song, onOpen: () -> Unit, onDelete: () -> Unit, onRetr
             song.map?.let { m ->
                 val meters = m.sections.filter { it.kind != Section.Kind.FREE }.map { it.meter }.distinct()
                 Text(
-                    "${m.mainBpm.toInt()} BPM · ${if (meters.size == 1) meters[0] else "${meters.size} meters"}",
+                    (if (song.usingTab) "TAB · " else "") +
+                        "${m.mainBpm.toInt()} BPM · ${if (meters.size == 1) meters[0] else "${meters.size} meters"}",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

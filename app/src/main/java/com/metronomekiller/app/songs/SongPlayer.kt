@@ -82,6 +82,12 @@ class SongPlayer(context: Context) {
         _position.value = 0.0
     }
 
+    /** Replace the click track (e.g. switching between the AI and the Songsterr tab). */
+    fun setMap(map: TempoMap) {
+        mixer.setClicks(map)
+        seekTo(player.currentPosition / 1000.0) // re-sync the mixer at the current spot
+    }
+
     fun toggle() = if (player.isPlaying) player.pause() else player.play()
     fun pause() = player.pause()
 

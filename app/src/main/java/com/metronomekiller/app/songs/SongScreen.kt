@@ -63,6 +63,7 @@ fun SongScreen(song: Song, metronome: MetronomeController, library: SongLibrary,
     val context = LocalContext.current
     val tick = rememberTick()
     val player = remember(song.id) { SongPlayer(context).also { it.load(song.uri, map); it.setSkips(song.skips) } }
+    LaunchedEffect(map) { player.setMap(map) } // switching AI <-> tab swaps the clicks live
     DisposableEffect(player) { onDispose { player.release() } }
 
     val pos by player.position.collectAsStateWithLifecycle()
@@ -84,6 +85,7 @@ fun SongScreen(song: Song, metronome: MetronomeController, library: SongLibrary,
     var selectedPart by remember { mutableIntStateOf(0) }
     LaunchedEffect(currentPart) { selectedPart = currentPart } // follow playback
     val bars = map.bars
+    val metersVary = remember(map) { bars.map { it.meter }.distinct().size > 1 }
     val currentBar = bars.indexOfLast { it.start <= pos + 0.02 }
 
     fun jump(sec: Double) { player.seekTo(sec.coerceAtLeast(0.0)); tick() }
@@ -98,13 +100,33 @@ fun SongScreen(song: Song, metronome: MetronomeController, library: SongLibrary,
             }
         }
 
+        // Where this tempo map came from, with a one-tap switch
+        song.tabInfo?.let { info ->
+            Row(
+                Modifier.fillMaxWidth().padding(top = 4.dp).clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant).padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    if (song.usingTab) "Songsterr tab: $info" else "Using the AI map (Songsterr tab available)",
+                    style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f),
+                    maxLines = 2, overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    if (song.usingTab) "Use AI" else "Use tab",
+                    style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.clickable { player.pause(); library.useTab(song.id, !song.usingTab) }.padding(start = 8.dp),
+                )
+            }
+        }
+
         // Current tempo readout
         val sec = parts.getOrNull(currentPart)
         Column(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
                 when {
                     sec == null || sec.kind == Section.Kind.FREE -> "free time"
-                    else -> "Part ${currentPart + 1} · ${sec.meter}${if (sec.kind == Section.Kind.RAMP) " · changing tempo" else ""}"
+                    else -> "Part ${currentPart + 1} · ${bars.getOrNull(currentBar)?.meter ?: sec.meter}${if (sec.kind == Section.Kind.RAMP) " · changing tempo" else ""}"
                 },
                 style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -178,14 +200,19 @@ fun SongScreen(song: Song, metronome: MetronomeController, library: SongLibrary,
             itemsIndexed(partBars, key = { _, b -> b.index }) { _, b ->
                 val on = b.index == currentBar
                 Box(
-                    Modifier.height(36.dp).clip(RoundedCornerShape(6.dp))
+                    Modifier.height(if (metersVary) 42.dp else 36.dp).clip(RoundedCornerShape(6.dp))
                         .background(if (on) MaterialTheme.colorScheme.primary else Color.Transparent)
                         .border(1.5.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(6.dp))
                         .clickable { jump(b.value.start) },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text("${b.index + 1}", style = MaterialTheme.typography.labelMedium,
-                        color = if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface)
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("${b.index + 1}", style = MaterialTheme.typography.labelMedium,
+                            color = if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface)
+                        // songs that change meter show each bar's meter (e.g. 7/8) under its number
+                        if (metersVary) Text(b.value.meter, fontSize = 9.sp, lineHeight = 9.sp,
+                            color = if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             }
         }

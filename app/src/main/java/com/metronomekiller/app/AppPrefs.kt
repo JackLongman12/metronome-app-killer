@@ -52,6 +52,11 @@ class AppPrefs(context: Context) {
     val songClickLevel: StateFlow<Float> = _songClickLevel
     fun setSongClickLevel(v: Float) { _songClickLevel.value = v; prefs.edit { putFloat("song_click_level", v) } }
 
+    /** Use Songsterr tabs for tempo maps when a song has one (sends title/artist to Songsterr). */
+    private val _songsterr = MutableStateFlow(prefs.getBoolean("songsterr", true))
+    val songsterr: StateFlow<Boolean> = _songsterr
+    fun setSongsterr(on: Boolean) { _songsterr.value = on; prefs.edit { putBoolean("songsterr", on) } }
+
     private val _vibrate = MutableStateFlow(prefs.getBoolean("vibrate", false))
     val vibrate: StateFlow<Boolean> = _vibrate
     fun setVibrate(on: Boolean) { _vibrate.value = on; prefs.edit { putBoolean("vibrate", on) } }

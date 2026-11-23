@@ -20,14 +20,25 @@ data class Section(
     val beats: Int,
     val firstDownbeat: Double,
     val uncertain: Boolean,
+    /** Bottom number of the time signature (4 from the AI; tabs can say 8, 16...). BPM counts this note. */
+    val noteValue: Int = 4,
 ) {
     enum class Kind { STEADY, RAMP, FREE }
 
-    val meter: String get() = if (kind == Kind.FREE) "free" else "$beatsPerBar/4"
+    val meter: String get() = when {
+        kind == Kind.FREE -> "free"
+        beatsPerBar == 0 -> "mixed" // a part whose bars change meter (from tabs)
+        else -> "$beatsPerBar/$noteValue"
+    }
 }
 
-/** One bar: where it starts and how many beats it has (songs can change every bar). */
-data class Bar(val start: Double, val beats: Int)
+/**
+ * One bar: where it starts and how many beats it has (songs can change every bar).
+ * [noteValue] is the bottom number when known (tabs); the AI assumes 4.
+ */
+data class Bar(val start: Double, val beats: Int, val noteValue: Int = 4) {
+    val meter: String get() = "$beats/$noteValue"
+}
 
 /**
  * A song's tempo map: beats, bar lines and sections. Stored as JSON per song.
@@ -49,25 +60,26 @@ data class TempoMap(
         put("main_bpm", mainBpm)
         put("beats", JSONArray(beats.map { (it * 10000).roundToInt() / 10000.0 }))
         put("downbeats", JSONArray(downbeats.map { (it * 10000).roundToInt() / 10000.0 }))
-        put("bars", JSONArray(bars.map { JSONObject().put("start", it.start).put("beats", it.beats) }))
+        put("bars", JSONArray(bars.map { JSONObject().put("start", it.start).put("beats", it.beats).put("note_value", it.noteValue) }))
         put("sections", JSONArray(sections.map {
             JSONObject().put("start", it.start).put("end", it.end).put("kind", it.kind.name)
                 .put("bpm", it.bpm).put("bpm_end", it.bpmEnd).put("beats_per_bar", it.beatsPerBar)
                 .put("beats", it.beats).put("first_downbeat", it.firstDownbeat).put("uncertain", it.uncertain)
+                .put("note_value", it.noteValue)
         }))
     }
 
     companion object {
         fun fromJson(o: JSONObject): TempoMap {
             fun arr(a: JSONArray) = DoubleArray(a.length()) { a.getDouble(it) }
-            val bars = o.getJSONArray("bars").let { a -> List(a.length()) { a.getJSONObject(it).let { b -> Bar(b.getDouble("start"), b.getInt("beats")) } } }
+            val bars = o.getJSONArray("bars").let { a -> List(a.length()) { a.getJSONObject(it).let { b -> Bar(b.getDouble("start"), b.getInt("beats"), b.optInt("note_value", 4)) } } }
             val secs = o.getJSONArray("sections").let { a ->
                 List(a.length()) {
                     val s = a.getJSONObject(it)
                     Section(
                         s.getDouble("start"), s.getDouble("end"), Section.Kind.valueOf(s.getString("kind")),
                         s.getDouble("bpm"), s.getDouble("bpm_end"), s.getInt("beats_per_bar"), s.getInt("beats"),
-                        s.getDouble("first_downbeat"), s.getBoolean("uncertain"),
+                        s.getDouble("first_downbeat"), s.getBoolean("uncertain"), s.optInt("note_value", 4),
                     )
                 }
             }
