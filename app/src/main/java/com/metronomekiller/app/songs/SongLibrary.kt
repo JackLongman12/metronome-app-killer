@@ -57,6 +57,9 @@ data class Song(
     val tabInfo: String? = null,
     /** Whether the tab's tempo map is in use (else the AI's). */
     val usingTab: Boolean = false,
+    /** You've hand-fixed this song's map (Edit mode); [usingEdit] = your version is playing. */
+    val hasEdit: Boolean = false,
+    val usingEdit: Boolean = false,
     /** Songsterr song id you picked yourself (pasted link): used instead of searching. */
     val tabId: Long? = null,
     /** Your own names for rows in the part-rows view, keyed by the row's first bar (0-based). */
@@ -192,7 +195,7 @@ class SongLibrary(private val context: Context) {
                     File(dir, "$id.tab.json").writeText(tabMap.toJson().toString())
                     File(dir, "$id.json").writeText(tabMap.toJson().toString())
                     val info = "${tab.artist} – ${tab.title} · ${if (points != null) "synced to this video" else "lined up with the audio"}"
-                    _songs.update { list -> list.map { if (it.id == id) it.copy(map = tabMap, tabInfo = info, usingTab = true, tabId = songId, rowNames = emptyMap()) else it } }
+                    _songs.update { list -> list.map { if (it.id == id) it.copy(map = tabMap, tabInfo = info, usingTab = true, usingEdit = false, tabId = songId, rowNames = emptyMap()) else it } }
                     save()
                     _linkStatus.value = "Using the tab: $info"
                 } catch (e: Throwable) {
@@ -220,7 +223,7 @@ class SongLibrary(private val context: Context) {
     fun remove(id: String) {
         val song = song(id)
         _songs.update { list -> list.filterNot { it.id == id } }
-        listOf("$id.json", "$id.ai.json", "$id.tab.json").forEach { File(dir, it).delete() }
+        listOf("$id.json", "$id.ai.json", "$id.tab.json", "$id.edit.json").forEach { File(dir, it).delete() }
         // Downloaded audio belongs to us; files from the phone are left alone.
         if (song?.link != null) audioDir.listFiles { f -> f.name.startsWith(id) }?.forEach { it.delete() }
         save()
@@ -228,14 +231,41 @@ class SongLibrary(private val context: Context) {
 
     fun retry(id: String) = analyse(id)
 
-    /** Switch a song between the Songsterr tab's tempo map and the AI's. */
-    fun useTab(id: String, on: Boolean) {
-        val file = File(dir, if (on) "$id.tab.json" else "$id.ai.json")
+    /** Which of a song's tempo maps to play: the AI's, the Songsterr tab's, or your edited one. */
+    enum class Source { AI, TAB, EDIT }
+
+    /** Switch a song between its tempo maps (each is kept in its own file). */
+    fun useMap(id: String, source: Source) {
+        val file = File(dir, when (source) { Source.AI -> "$id.ai.json"; Source.TAB -> "$id.tab.json"; Source.EDIT -> "$id.edit.json" })
         if (!file.exists()) return
         val map = runCatching { TempoMap.fromJson(JSONObject(file.readText())) }.getOrNull() ?: return
         File(dir, "$id.json").writeText(file.readText())
-        _songs.update { list -> list.map { if (it.id == id) it.copy(map = map, usingTab = on) else it } }
+        _songs.update { list -> list.map { if (it.id == id) it.copy(map = map, usingTab = source == Source.TAB, usingEdit = source == Source.EDIT) else it } }
         save()
+    }
+
+    /**
+     * Save a hand-fixed map as this song's "yours" map and play it. The AI and
+     * tab maps are untouched, so you can always switch back.
+     */
+    fun saveEdit(id: String, map: TempoMap) {
+        val json = map.toJson().toString()
+        File(dir, "$id.edit.json").writeText(json)
+        File(dir, "$id.json").writeText(json)
+        _songs.update { list -> list.map {
+            if (it.id != id) it
+            // row names are keyed by bar number; if the bars were renumbered they'd land on the wrong rows
+            else it.copy(map = map, hasEdit = true, usingEdit = true, usingTab = false,
+                rowNames = if (it.map?.bars?.size == map.bars.size) it.rowNames else emptyMap())
+        } }
+        save()
+    }
+
+    /** Throw away your edits and go back to the tab map (if there is one) or the AI's. */
+    fun discardEdit(id: String) {
+        File(dir, "$id.edit.json").delete()
+        _songs.update { list -> list.map { if (it.id == id) it.copy(hasEdit = false, usingEdit = false) else it } }
+        useMap(id, if (song(id)?.tabInfo != null) Source.TAB else Source.AI)
     }
 
     private fun setStatus(id: String, status: SongStatus, map: TempoMap? = null) {
@@ -288,6 +318,7 @@ class SongLibrary(private val context: Context) {
                         TempoMapBuilder.build(r.beats, r.downbeats, audio.durationSec, r.downbeatScores)
                     }
                     File(dir, "$id.ai.json").writeText(aiMap.toJson().toString())
+                    File(dir, "$id.edit.json").delete() // a fresh analysis replaces old hand fixes
 
                     // Songsterr: a human-written tempo map, if this song has a synced tab.
                     var map = aiMap
@@ -307,7 +338,7 @@ class SongLibrary(private val context: Context) {
                         }
                     }
                     File(dir, "$id.json").writeText(map.toJson().toString())
-                    _songs.update { list -> list.map { if (it.id == id) it.copy(tabInfo = tabInfo, usingTab = tabInfo != null, rowNames = emptyMap()) else it } }
+                    _songs.update { list -> list.map { if (it.id == id) it.copy(tabInfo = tabInfo, usingTab = tabInfo != null, rowNames = emptyMap(), hasEdit = false, usingEdit = false) else it } }
                     setStatus(id, SongStatus.Ready, map)
                     save()
                 } catch (e: Throwable) {
@@ -349,6 +380,7 @@ class SongLibrary(private val context: Context) {
                 skips = skips ?: emptyList(), offsetMs = o.optInt("offsetMs", 0),
                 tabInfo = o.optString("tabInfo").ifEmpty { null }, usingTab = o.optBoolean("usingTab"),
                 tabId = o.optLong("tabId", 0L).takeIf { it > 0 },
+                hasEdit = File(dir, "$id.edit.json").exists(), usingEdit = o.optBoolean("usingEdit"),
                 rowNames = o.optJSONObject("rowNames")?.let { r -> r.keys().asSequence().associate { k -> k.toInt() to r.getString(k) } } ?: emptyMap())
         }
     }.getOrDefault(emptyList())
@@ -359,7 +391,7 @@ class SongLibrary(private val context: Context) {
                 .put("uri", it.uri).put("addedAt", it.addedAt)
                 .put("offsetMs", it.offsetMs)
                 .put("tabInfo", it.tabInfo ?: "").put("usingTab", it.usingTab)
-                .put("tabId", it.tabId ?: 0L)
+                .put("tabId", it.tabId ?: 0L).put("usingEdit", it.usingEdit)
                 .put("rowNames", JSONObject().apply { it.rowNames.forEach { (k, v) -> put(k.toString(), v) } })
                 .put("link", it.link ?: "").put("playlist", it.playlist ?: "")
                 .put("skips", JSONArray(it.skips.map { (a, b) -> JSONArray(listOf(a, b)) }))

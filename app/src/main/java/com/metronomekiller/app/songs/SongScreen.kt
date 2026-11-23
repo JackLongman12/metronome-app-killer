@@ -79,6 +79,11 @@ fun SongScreen(song: Song, metronome: MetronomeController, library: SongLibrary,
     val rowsView by prefs.partRows.collectAsStateWithLifecycle()
     val loop by player.loop.collectAsStateWithLifecycle()
     var renaming by remember { mutableStateOf<PartRow?>(null) }
+    // Edit mode: a selected stretch of rows (first..last row index) and an undo history
+    var editing by remember { mutableStateOf(false) }
+    var selection by remember { mutableStateOf<IntRange?>(null) }
+    val undo = remember { androidx.compose.runtime.mutableStateListOf<com.metronomekiller.app.analysis.TempoMap>() }
+    var showMeter by remember { mutableStateOf(false) }
 
     // The metronome and the song shouldn't click over each other.
     LaunchedEffect(playing) { if (playing) metronome.stop() }
@@ -93,6 +98,30 @@ fun SongScreen(song: Song, metronome: MetronomeController, library: SongLibrary,
     val rows = remember(map, song.rowNames) { PartRows.build(map, song.rowNames) }
     val usualMeter = remember(map) { PartRows.usualMeter(map) }
     val currentRow = rows.indexOfLast { it.first <= currentBar.coerceAtLeast(0) }
+    val showRows = rowsView || editing // editing always works on the part rows
+
+    /**
+     * Apply one fix to the selected bars, keep the old map for Undo, save, and
+     * re-select the same stretch of time (bar numbers may have changed).
+     */
+    fun applyFix(fix: (com.metronomekiller.app.analysis.TempoMap, Int, Int) -> com.metronomekiller.app.analysis.TempoMap) {
+        val sel = selection ?: return
+        val a = rows[sel.first].first
+        val b = rows[sel.last].end
+        val t0 = bars[a].start
+        val t1 = bars.getOrNull(b)?.start ?: Double.MAX_VALUE
+        val fixed = fix(map, a, b)
+        if (fixed === map) return
+        undo += map
+        library.saveEdit(song.id, fixed)
+        val newRows = PartRows.build(fixed, emptyMap())
+        val inside = newRows.indices.filter {
+            val t = fixed.bars[newRows[it].first].start
+            t >= t0 - 1e-6 && t < t1 - 1e-6
+        }
+        selection = if (inside.isEmpty()) null else inside.first()..inside.last()
+        tick()
+    }
 
     fun jump(sec: Double) { player.seekTo(sec.coerceAtLeast(0.0)); tick() }
 
@@ -106,23 +135,35 @@ fun SongScreen(song: Song, metronome: MetronomeController, library: SongLibrary,
             }
         }
 
-        // Where this tempo map came from, with a one-tap switch
-        song.tabInfo?.let { info ->
+        // Where this tempo map came from, with one-tap switches to the others
+        if (song.tabInfo != null || song.hasEdit) {
+            val info = song.tabInfo
             Row(
                 Modifier.fillMaxWidth().padding(top = 4.dp).clip(RoundedCornerShape(8.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant).padding(horizontal = 12.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    if (song.usingTab) "Songsterr tab: $info" else "Using the AI map (Songsterr tab available)",
+                    when {
+                        song.usingEdit -> "Your edited map"
+                        song.usingTab -> "Songsterr tab: $info"
+                        else -> "AI map"
+                    },
                     style = MaterialTheme.typography.labelSmall, modifier = Modifier.weight(1f),
                     maxLines = 2, overflow = TextOverflow.Ellipsis,
                 )
-                Text(
-                    if (song.usingTab) "Use AI" else "Use tab",
-                    style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.clickable { player.pause(); library.useTab(song.id, !song.usingTab) }.padding(start = 8.dp),
-                )
+                val others = buildList {
+                    if (song.usingTab || song.usingEdit) add("AI" to SongLibrary.Source.AI)
+                    if (info != null && !song.usingTab) add("tab" to SongLibrary.Source.TAB)
+                    if (song.hasEdit && !song.usingEdit) add("yours" to SongLibrary.Source.EDIT)
+                }
+                others.forEach { (label, src) ->
+                    Text(
+                        "Use $label",
+                        style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.clickable { player.pause(); undo.clear(); library.useMap(song.id, src) }.padding(start = 10.dp),
+                    )
+                }
             }
         }
 
@@ -170,7 +211,18 @@ fun SongScreen(song: Song, metronome: MetronomeController, library: SongLibrary,
         }
 
         // Bars: part rows (default) or the bar grid; the switch is remembered
-        Row(Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (editing) Row(Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            val sel = selection
+            Text(
+                if (sel == null) "Editing · tap the rows that are wrong"
+                else "Editing · bars ${rows[sel.first].first + 1}–${rows[sel.last].end}",
+                style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f),
+            )
+            Text("All", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.clickable { selection = if (rows.isEmpty()) null else rows.indices }.padding(horizontal = 8.dp))
+            Text("Done", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.clickable { editing = false; selection = null }.padding(start = 8.dp))
+        } else Row(Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(if (rowsView) "Parts · tap a bar to jump, hold to loop" else "Parts · tap to jump",
                 style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
             ViewSwitch(rowsView) { prefs.setPartRows(it) }
@@ -187,9 +239,20 @@ fun SongScreen(song: Song, metronome: MetronomeController, library: SongLibrary,
                     modifier = Modifier.clickable { player.clearLoop(); tick() }.padding(start = 8.dp))
             }
         }
-        if (rowsView) PartRowsList(
+        if (showRows) PartRowsList(
             rows = rows, bars = bars, currentBar = currentBar, playing = playing,
             usualMeter = usualMeter, loopStart = loop?.first,
+            selected = if (editing) selection else null,
+            onSelect = if (!editing) null else { i ->
+                // first tap picks a row; later taps stretch the selection to include the tapped row
+                val sel = selection
+                selection = when {
+                    sel == null -> i..i
+                    i in sel -> i..i
+                    else -> minOf(sel.first, i)..maxOf(sel.last, i)
+                }
+                tick()
+            },
             modifier = Modifier.weight(1f),
             onJump = { jump(bars[it].start) },
             onLoop = { r ->
@@ -200,7 +263,7 @@ fun SongScreen(song: Song, metronome: MetronomeController, library: SongLibrary,
             },
             onRename = { renaming = it },
         )
-        if (!rowsView) Column(Modifier.weight(1f)) {
+        if (!showRows) Column(Modifier.weight(1f)) {
         // Parts (the "Parts" label is in the header row above)
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             parts.forEachIndexed { i, p ->
@@ -294,10 +357,29 @@ fun SongScreen(song: Song, metronome: MetronomeController, library: SongLibrary,
             songLevel, clickLevel, prefs::setSongLevel, prefs::setSongClickLevel,
             offsetMs = song.offsetMs, onOffset = { library.setOffset(song.id, it) },
         ) { showMix = false }
-        Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally)) {
+        if (showMeter) MeterSheet(onDismiss = { showMeter = false }) { n, d ->
+            showMeter = false
+            applyFix { m, a, b -> com.metronomekiller.app.analysis.MapEditor.setMeter(m, a, b, n, d) }
+        }
+        if (editing) EditToolbar(
+            hasSelection = selection != null,
+            canUndo = undo.isNotEmpty(),
+            hasEdit = song.hasEdit,
+            onHalf = { applyFix(com.metronomekiller.app.analysis.MapEditor::halfTempo) },
+            onDouble = { applyFix(com.metronomekiller.app.analysis.MapEditor::doubleTempo) },
+            onEarlier = { applyFix { m, a, b -> com.metronomekiller.app.analysis.MapEditor.shiftDownbeat(m, a, b, -1) } },
+            onLater = { applyFix { m, a, b -> com.metronomekiller.app.analysis.MapEditor.shiftDownbeat(m, a, b, +1) } },
+            onMeter = { showMeter = true },
+            onUndo = {
+                undo.removeLastOrNull()?.let { prev -> library.saveEdit(song.id, prev) }
+                selection = null; tick()
+            },
+            onDiscard = { undo.clear(); selection = null; library.discardEdit(song.id); tick() },
+        ) else Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)) {
             Chip(if (clickOn) "Click on" else "Click off", clickOn) { player.setClickOn(!clickOn) }
             Chip("Speed ${(speed * 100).toInt()}%", speed != 1f) { player.cycleSpeed() }
             Chip("Mix", showMix) { showMix = true }
+            Chip("Edit", false) { editing = true; player.clearLoop() }
         }
     }
 }

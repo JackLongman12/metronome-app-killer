@@ -55,6 +55,9 @@ fun PartRowsList(
     usualMeter: String?,
     loopStart: Double?,
     modifier: Modifier = Modifier,
+    /** Edit mode: the selected rows, and what a tap does instead of jumping. */
+    selected: IntRange? = null,
+    onSelect: ((Int) -> Unit)? = null,
     onJump: (Int) -> Unit,
     onLoop: (PartRow) -> Unit,
     onRename: (PartRow) -> Unit,
@@ -70,17 +73,21 @@ fun PartRowsList(
         itemsIndexed(rows, key = { _, r -> r.first }) { i, r ->
             val looping = loopStart != null && bars.getOrNull(r.first)?.start == loopStart
             val active = i == currentRow
+            val picked = selected != null && i in selected
+            val tap: (Int) -> Unit = { bar -> if (onSelect != null) onSelect(i) else onJump(bar) }
+            val hold: () -> Unit = { if (onSelect == null) onLoop(r) }
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp))
-                    .then(if (looping) Modifier.border(1.5.dp, c.primary, RoundedCornerShape(8.dp)) else Modifier)
-                    .combinedClickable(onClick = { onJump(r.first) }, onLongClick = { onLoop(r) })
+                    .then(if (picked) Modifier.background(c.primaryContainer) else Modifier)
+                    .then(if (looping || picked) Modifier.border(1.5.dp, c.primary, RoundedCornerShape(8.dp)) else Modifier)
+                    .combinedClickable(onClick = { tap(r.first) }, onLongClick = hold)
                     .padding(horizontal = 4.dp, vertical = 3.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 // Name (tap to rename). Unnamed rows show their bar range.
                 Column(
                     Modifier.width(84.dp).clip(RoundedCornerShape(6.dp))
-                        .combinedClickable(onClick = { onRename(r) }, onLongClick = { onLoop(r) })
+                        .combinedClickable(onClick = { if (onSelect != null) onSelect(i) else onRename(r) }, onLongClick = hold)
                         .padding(vertical = 2.dp, horizontal = 2.dp),
                 ) {
                     val title = r.name ?: r.range
@@ -115,7 +122,7 @@ fun PartRowsList(
                                         else -> c.surfaceVariant
                                     }
                                 )
-                                .combinedClickable(onClick = { onJump(b) }, onLongClick = { onLoop(r) }),
+                                .combinedClickable(onClick = { tap(b) }, onLongClick = hold),
                             contentAlignment = Alignment.Center,
                         ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
