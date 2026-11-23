@@ -53,6 +53,10 @@ Requires JDK 17 and the Android SDK (platform `android-37.2`, build-tools 37, ND
 
 Release builds in CI are signed with a key stored in repository secrets, so every build installs over the previous one.
 
+## Credits
+
+- Fonts in the Comic book theme: [Bangers](https://github.com/googlefonts/bangers) and [Comic Neue](https://github.com/crozynski/comicneue), both under the SIL Open Font License 1.1.
+
 ## License
 
 GPL-3.0. See [LICENSE](LICENSE).

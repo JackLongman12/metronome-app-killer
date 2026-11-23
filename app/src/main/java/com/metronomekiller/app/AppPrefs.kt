@@ -3,7 +3,6 @@ package com.metronomekiller.app
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
-import com.metronomekiller.app.metronome.BpmDisplay
 import com.metronomekiller.app.ui.AppColors
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -32,13 +31,6 @@ class AppPrefs(context: Context) {
     private val _volume = MutableStateFlow(prefs.getFloat("volume", 1f))
     val volume: StateFlow<Float> = _volume
     fun setVolume(v: Float) { _volume.value = v; prefs.edit { putFloat("volume", v) } }
-
-    /** Which tempo display the metronome screen uses (see BpmDisplay). */
-    private val _bpmDisplay = MutableStateFlow(
-        runCatching { BpmDisplay.valueOf(prefs.getString("bpm_display", null) ?: "") }.getOrDefault(BpmDisplay.KNOB)
-    )
-    val bpmDisplay: StateFlow<BpmDisplay> = _bpmDisplay
-    fun setBpmDisplay(d: BpmDisplay) { _bpmDisplay.value = d; prefs.edit { putString("bpm_display", d.name) } }
 
     /** Colour scheme (see AppColors). Studio is the default. */
     private val _colors = MutableStateFlow(

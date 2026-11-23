@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -67,6 +68,10 @@ import com.metronomekiller.app.ui.rememberTick
 import com.metronomekiller.app.engine.MetronomeController
 import com.metronomekiller.app.engine.Subdivision
 import com.metronomekiller.app.ui.AppIcons
+import com.metronomekiller.app.ui.comicPanel
+import com.metronomekiller.app.ui.isComic
+import com.metronomekiller.app.ui.rememberHalftone
+import androidx.compose.foundation.border
 import com.metronomekiller.app.ui.ink
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.ui.graphics.Color
@@ -91,7 +96,7 @@ fun MetronomeScreen(
 ) {
     val s by controller.state.collectAsStateWithLifecycle()
     val current by controller.currentBeat.collectAsStateWithLifecycle()
-    val display by controller.prefs.bpmDisplay.collectAsStateWithLifecycle()
+    val comic = isComic()
     val tick = rememberTick()
 
     var editBpm by remember { mutableStateOf(false) }
@@ -104,20 +109,17 @@ fun MetronomeScreen(
         CreateLoadSwitch(onLoad = onLoadSong)
 
         Spacer(Modifier.height(24.dp))
-        // The beat ring already shows and edits the beats, so it replaces the blocks.
-        if (display != BpmDisplay.RING) {
-            BeatEditor(
-                beats = s.beats,
-                lastFraction = s.meter.lastBeatFraction.toFloat(),
-                current = if (s.playing) current else -1,
-                onCycle = controller::cycleBeat,
-                onSet = controller::setBeat,
-            )
-        }
+        BeatEditor(
+            beats = s.beats,
+            lastFraction = s.meter.lastBeatFraction.toFloat(),
+            current = if (s.playing) current else -1,
+            onCycle = controller::cycleBeat,
+            onSet = controller::setBeat,
+        )
 
-        Spacer(Modifier.weight(1f))
+        Spacer(Modifier.height(20.dp))
         Wordmark()
-        Spacer(Modifier.weight(1f))
+        Spacer(Modifier.height(20.dp))
 
         // Three square buttons: time signature, subdivision, more
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(28.dp, Alignment.CenterHorizontally)) {
@@ -139,12 +141,16 @@ fun MetronomeScreen(
             SquareButton(onClick = { more = true }) { Text("•••", fontSize = 18.sp) }
         }
 
-        Spacer(Modifier.weight(1f))
+        Spacer(Modifier.height(12.dp))
 
-        // Tempo control, with Play (left) and Tap (right) at its bottom corners.
-        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.BottomCenter) {
-            TempoDisplay(display, s, if (s.playing) current else -1, controller, onEditBpm = { editBpm = true })
-            Row(Modifier.fillMaxWidth().padding(bottom = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+        // The rotary knob, with Play (left) and Tap (right). In the comic theme
+        // they get their own row below the knob; otherwise they sit at its
+        // bottom corners. Either way they're inset from the screen edges.
+        val playTap: @Composable () -> Unit = {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
                 SquareButton(onClick = onTogglePlay, size = 68, dark = true) {
                     Icon(
                         if (s.playing) AppIcons.Pause else AppIcons.Play,
@@ -158,7 +164,25 @@ fun MetronomeScreen(
                         tick()
                     },
                     size = 68,
-                ) { Text("Tap", fontSize = 18.sp, fontWeight = FontWeight.Medium) }
+                ) { Text("Tap", style = if (comic) MaterialTheme.typography.titleLarge else MaterialTheme.typography.titleMedium) }
+            }
+        }
+        // LEARN: BoxWithConstraints tells us how much room is left, so the knob
+        // can be as big as possible (up to 300 dp) without pushing Play/Tap off
+        // a smaller screen.
+        BoxWithConstraints(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+            val reserved = 118.dp + if (comic) 80.dp else 0.dp // BPM readout (+ the comic button row)
+            val knob = (maxHeight - reserved).coerceIn(170.dp, minOf(300.dp, maxWidth))
+            if (comic) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    TempoKnob(s, controller, onEditBpm = { editBpm = true }, knobSize = knob)
+                    playTap()
+                }
+            } else {
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.BottomCenter) {
+                    TempoKnob(s, controller, onEditBpm = { editBpm = true }, knobSize = knob)
+                    playTap()
+                }
             }
         }
         Spacer(Modifier.height(8.dp))
@@ -194,23 +218,24 @@ private fun subdivisionGlyph(s: Subdivision) = when (s) {
 @Composable
 private fun CreateLoadSwitch(onLoad: () -> Unit) {
     val c = MaterialTheme.colorScheme
+    val comic = isComic()
+    val track = if (comic) Modifier.comicPanel(RoundedCornerShape(6.dp))
+    else Modifier.clip(RoundedCornerShape(12.dp)).background(c.ink.copy(alpha = 0.45f)).padding(3.dp)
     Row(
         Modifier
             .fillMaxWidth()
             .padding(horizontal = 40.dp)
             .height(44.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(c.ink.copy(alpha = 0.45f))
-            .padding(3.dp)
+            .then(track)
     ) {
         Box(
             Modifier.weight(1f).fillMaxSize().clip(RoundedCornerShape(10.dp)).background(c.ink),
             contentAlignment = Alignment.Center,
-        ) { Text("Create", fontWeight = FontWeight.Medium, color = Color.White) }
+        ) { Text("Create", style = MaterialTheme.typography.titleMedium, color = Color.White) }
         Box(
             Modifier.weight(1f).fillMaxSize().clip(RoundedCornerShape(10.dp)).clickable(onClick = onLoad),
             contentAlignment = Alignment.Center,
-        ) { Text("Load", color = c.onSurfaceVariant) }
+        ) { Text("Load", style = MaterialTheme.typography.titleMedium, color = if (comic) Color.Black else c.onSurfaceVariant) }
     }
 }
 
@@ -218,6 +243,22 @@ private fun CreateLoadSwitch(onLoad: () -> Unit) {
 @Composable
 private fun Wordmark() {
     val c = MaterialTheme.colorScheme
+    if (isComic()) {
+        // A clean caption box: a small halftone swatch and the name in comic lettering.
+        val dots = rememberHalftone()
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+            Row(
+                Modifier.comicPanel(RoundedCornerShape(6.dp)).padding(horizontal = 14.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.size(width = 14.dp, height = 20.dp).clip(RoundedCornerShape(3.dp)).background(dots)
+                    .border(2.dp, Color.Black, RoundedCornerShape(3.dp)))
+                Spacer(Modifier.width(10.dp))
+                Text("METRONOME KILLER", style = MaterialTheme.typography.titleLarge)
+            }
+        }
+        return
+    }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
         // a few bars of different heights, like a sound wave
         listOf(10, 22, 40, 22, 30, 12).forEach { h ->
@@ -235,13 +276,14 @@ private fun Wordmark() {
 @Composable
 fun SquareButton(onClick: () -> Unit, size: Int = 64, dark: Boolean = false, content: @Composable () -> Unit) {
     val c = MaterialTheme.colorScheme
-    val shape = RoundedCornerShape(16.dp)
+    val comic = isComic()
+    val shape = RoundedCornerShape(if (comic) 6.dp else 16.dp)
+    val look = if (comic) Modifier.comicPanel(shape, fill = if (dark) Color.Black else Color.White)
+    else Modifier.shadow(6.dp, shape).clip(shape).background(if (dark) c.ink else c.surfaceContainerHigh)
     Box(
         Modifier
             .size(size.dp)
-            .shadow(6.dp, shape)
-            .clip(shape)
-            .background(if (dark) c.ink else c.surfaceContainerHigh)
+            .then(look)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {

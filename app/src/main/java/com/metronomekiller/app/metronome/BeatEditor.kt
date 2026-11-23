@@ -29,6 +29,8 @@ import androidx.compose.ui.unit.dp
 import com.metronomekiller.app.ui.rememberTick
 import com.metronomekiller.app.engine.BeatState
 import com.metronomekiller.app.ui.ink
+import com.metronomekiller.app.ui.isComic
+import com.metronomekiller.app.ui.rememberHalftone
 import kotlin.math.abs
 
 /**
@@ -86,6 +88,8 @@ private fun BeatBlock(
     // composition (with a stale beat state).
     val tap by rememberUpdatedState(onTap)
     val swipe by rememberUpdatedState(onSwipe)
+    val comic = isComic()
+    val dots = rememberHalftone(spacing = 5.dp, radius = 1.2.dp)
     val fill by animateColorAsState(if (playing) c.primary else c.ink, tween(60), label = "beatFill")
 
     Column(
@@ -129,7 +133,13 @@ private fun BeatBlock(
                     .weight(1f)
                     .fillMaxWidth()
                     .clip(shape)
-                    .background(if (state.level >= seg) fill else Color.Transparent)
+                    .then(
+                        when {
+                            state.level < seg -> Modifier
+                            comic && playing -> Modifier.background(dots) // halftone = "this one is sounding"
+                            else -> Modifier.background(fill)
+                        }
+                    )
                     .border(2.dp, if (playing && state.level >= seg) fill else c.ink, shape)
             )
         }

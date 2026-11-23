@@ -6,6 +6,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
 
 /*
@@ -51,6 +52,10 @@ private fun light(
 // Studio: warm dark grey with a teal accent, like a piece of studio hardware.
 private val StudioScheme = dark(0xFF2A2A2C, 0xFF333335, 0xFF2F2F31, 0xFFF2F2F2, 0xFF9A9A9E,
     0xFF1FB8A6, 0xFF00201C, 0xFF17413C, 0xFF5A5A5E, 0xFF3A3A3D, 0xFF111112)
+// Comic book: black ink on white paper. The accent IS black; halftone dots and
+// hard shadows (see Comic.kt) carry the style instead of colour.
+private val ComicScheme = light(0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFF000000, 0xFF333333,
+    0xFF000000, 0xFFFFFFFF, 0xFFE6E6E6, 0xFF000000, 0xFF000000, 0xFF000000)
 private val GraphiteScheme = dark(0xFF0F1115, 0xFF16191E, 0xFF1B1E24, 0xFFE8EAED, 0xFF9AA0A6,
     0xFF4C8DFF, 0xFF001A40, 0xFF22324F, 0xFF3A3F47, 0xFF262A31, 0xFF4A5160)
 private val OledScheme = dark(0xFF000000, 0xFF0A0A0A, 0xFF141414, 0xFFF2F2F2, 0xFF8A8A8A,
@@ -71,12 +76,13 @@ enum class AppColors(val label: String, val swatchBg: Color, val swatchAccent: C
     OLED("OLED black and lime", Color(0xFF000000), Color(0xFFB8F35A)),
     PAPER("Paper and ink green", Color(0xFFF4F2ED), Color(0xFF2F6B57)),
     SLATE("Slate and teal", Color(0xFF151A1F), Color(0xFF2EC4B6)),
-    WARM("Warm (follows system)", Color(0xFF111214), Color(0xFFFF7A52));
+    WARM("Warm (follows system)", Color(0xFF111214), Color(0xFFFF7A52)),
+    COMIC("Comic book", Color(0xFFFFFFFF), Color(0xFF000000));
 
     /** Whether this scheme is dark, so the status bar icons can be made readable. */
     @Composable
     fun isDark(): Boolean = when (this) {
-        PAPER -> false
+        PAPER, COMIC -> false
         WARM -> isSystemInDarkTheme()
         else -> true
     }
@@ -84,6 +90,7 @@ enum class AppColors(val label: String, val swatchBg: Color, val swatchAccent: C
     @Composable
     fun scheme(): ColorScheme = when (this) {
         STUDIO -> StudioScheme
+        COMIC -> ComicScheme
         GRAPHITE -> GraphiteScheme
         OLED -> OledScheme
         PAPER -> PaperScheme
@@ -102,5 +109,12 @@ val ColorScheme.ink: Color get() = surfaceContainerLowest
 
 @Composable
 fun AppTheme(colors: AppColors, content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = colors.scheme(), content = content)
+    val comic = colors == AppColors.COMIC
+    CompositionLocalProvider(LocalComic provides comic) {
+        MaterialTheme(
+            colorScheme = colors.scheme(),
+            typography = if (comic) comicTypography() else MaterialTheme.typography,
+            content = content,
+        )
+    }
 }

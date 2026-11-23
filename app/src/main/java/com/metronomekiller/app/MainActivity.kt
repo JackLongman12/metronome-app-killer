@@ -60,6 +60,14 @@ import com.metronomekiller.app.settings.SettingsScreen
 import com.metronomekiller.app.engine.BeatState
 import com.metronomekiller.app.ui.AppIcons
 import com.metronomekiller.app.ui.AppTheme
+import com.metronomekiller.app.ui.isComic
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.graphics.Color
 import com.metronomekiller.app.update.UpdateState
 import com.metronomekiller.app.update.UpdateViewModel
 import kotlinx.coroutines.launch
@@ -173,7 +181,8 @@ class MainActivity : ComponentActivity() {
         Scaffold(
             snackbarHost = { SnackbarHost(snackbar) },
             bottomBar = {
-                if (screen == Screen.MAIN) NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
+                if (screen == Screen.MAIN && isComic()) ComicTabs(tab) { tab = it }
+                else if (screen == Screen.MAIN) NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
                     Tab.entries.forEach { t ->
                         NavigationBarItem(
                             selected = tab == t,
@@ -268,6 +277,26 @@ class MainActivity : ComponentActivity() {
                 text = { Text(failure!!) },
                 confirmButton = { TextButton(onClick = updates::dismissDialog) { Text("Close") } },
             )
+        }
+    }
+}
+
+/** Comic-theme bottom bar: ruled cells, the selected tab inked solid black. */
+@Composable
+private fun ComicTabs(selected: Tab, onSelect: (Tab) -> Unit) {
+    Column(Modifier.navigationBarsPadding()) {
+        Box(Modifier.fillMaxWidth().height(2.5.dp).background(Color.Black))
+        Row(Modifier.fillMaxWidth().height(52.dp)) {
+            Tab.entries.forEachIndexed { i, t ->
+                if (i > 0) Box(Modifier.width(2.dp).fillMaxHeight().background(Color.Black))
+                val on = t == selected
+                Box(
+                    Modifier.weight(1f).fillMaxHeight().background(if (on) Color.Black else Color.White).clickable { onSelect(t) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(t.label.uppercase(), style = MaterialTheme.typography.titleSmall, color = if (on) Color.White else Color.Black, maxLines = 1)
+                }
+            }
         }
     }
 }

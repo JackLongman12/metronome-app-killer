@@ -30,7 +30,6 @@ import kotlin.math.roundToInt
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.metronomekiller.app.BuildConfig
 import com.metronomekiller.app.engine.MetronomeController
-import com.metronomekiller.app.metronome.BpmDisplay
 import com.metronomekiller.app.ui.AppColors
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -63,7 +62,6 @@ fun SettingsScreen(
     val accentsOnly by controller.prefs.flashAccentsOnly.collectAsStateWithLifecycle()
     val hapticTicks by controller.prefs.hapticTicks.collectAsStateWithLifecycle()
     val volume by controller.prefs.volume.collectAsStateWithLifecycle()
-    val display by controller.prefs.bpmDisplay.collectAsStateWithLifecycle()
     val colors by controller.prefs.colors.collectAsStateWithLifecycle()
     val route by controller.route.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -77,10 +75,6 @@ fun SettingsScreen(
         }
 
         SectionLabel("Appearance")
-        Text("Tempo display", modifier = Modifier.padding(start = 20.dp, top = 8.dp))
-        BpmDisplay.entries.forEach { d ->
-            Choice(d.label, d.description, selected = d == display) { controller.prefs.setBpmDisplay(d) }
-        }
         Text("Colours", modifier = Modifier.padding(start = 20.dp, top = 12.dp))
         AppColors.entries.forEach { c ->
             Row(
