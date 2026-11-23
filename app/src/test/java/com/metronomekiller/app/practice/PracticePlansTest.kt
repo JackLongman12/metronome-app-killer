@@ -32,4 +32,10 @@ class PracticePlansTest {
         // round 0: on, off · round 1: on, off, off · round 2: on, off, off, off
         assertEquals(listOf(false, true, false, true, true, false, true, true, true), silent)
     }
+
+    @Test fun countInComesBeforeTheGaps() {
+        val c = GapCounter(GapPlan(on = 1, off = 1), lead = 2)
+        val states = (0 until 5).map { c.nextBar(); c.countingIn to c.silent }
+        assertEquals(listOf(true to false, true to false, false to false, false to true, false to false), states)
+    }
 }

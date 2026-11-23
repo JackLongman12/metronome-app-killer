@@ -141,6 +141,8 @@ void ClickEngine::buildVoices(int sr) { voices_ = buildAll(sr); }
 int ClickEngine::soundCount() { return 8; }
 
 void ClickEngine::resetTimeline() {
+    barInRound_ = -1 - leadBars_.load();
+    round_ = 0;
     frame_ = 0;
     framesToNext_ = 0.0;
     beatIdx_ = 0;
@@ -244,7 +246,7 @@ oboe::DataCallbackResult ClickEngine::onAudioReady(oboe::AudioStream* stream, vo
         beatIdx_ = 0;
         subPos_ = 0;
         framesToNext_ = 0.0;
-        barInRound_ = -1;
+        barInRound_ = -1 - leadBars_.load(); // count-in bars come first (negative = still counting in)
         round_ = 0;
     }
 

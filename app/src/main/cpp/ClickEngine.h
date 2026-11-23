@@ -66,6 +66,8 @@ public:
      * [grow] = 1 adds one more silent bar each round (up to 8). on/off 0 = off.
      */
     void setGap(int on, int off, int grow) { gapOn_.store(on); gapOff_.store(off); gapGrow_.store(grow); }
+    /** Count-in: this many clicking bars come before the gap pattern starts (read at start). */
+    void setLeadBars(int bars) { leadBars_.store(bars < 0 ? 0 : bars); }
     /** Randomly silence this percentage of beats (never beat 1). 0 = off. */
     void setRandomMute(int percent) { muteChance_.store(percent); }
     /** Switch to [bpm] exactly when the next bar starts (speed trainer). */
@@ -114,6 +116,7 @@ private:
     std::atomic<int> gapOn_{0};
     std::atomic<int> gapOff_{0};
     std::atomic<int> gapGrow_{0};
+    std::atomic<int> leadBars_{0};
     std::atomic<int> muteChance_{0};
     std::atomic<double> pendingBpm_{-1.0};
 

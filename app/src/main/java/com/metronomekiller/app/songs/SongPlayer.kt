@@ -83,8 +83,13 @@ class SongPlayer(context: Context) {
      * position ~30 times a second and jumps back when it passes the end; the jump
      * lands on the loop's first bar line, so the click restarts on beat 1.
      */
+    private val _loopRepeats = MutableStateFlow(0)
+    /** How many times the current loop has gone round (0 on the first pass). */
+    val loopRepeats: StateFlow<Int> = _loopRepeats
+
     fun setLoop(start: Double, end: Double) {
         _loop.value = start to end
+        _loopRepeats.value = 0
         val now = player.currentPosition / 1000.0
         if (now < start || now >= end) seekTo(start)
     }
@@ -122,6 +127,14 @@ class SongPlayer(context: Context) {
     fun setLevels(song: Float, click: Float) { mixer.songGain = song; mixer.clickGain = click }
 
     /** 0.5x to 1.0x practice speed (pitch stays the same). */
+    /** Practice speed 0.5x–1.0x (pitch stays the same). */
+    fun setSpeed(f: Float) {
+        val v = f.coerceIn(0.5f, 1f)
+        if (v == _speed.value) return
+        _speed.value = v
+        player.playbackParameters = PlaybackParameters(v)
+    }
+
     fun cycleSpeed() {
         val next = when (_speed.value) { 1f -> 0.75f; 0.75f -> 0.5f; else -> 1f }
         _speed.value = next
@@ -139,7 +152,7 @@ class SongPlayer(context: Context) {
             while (isActive) {
                 val now = player.currentPosition / 1000.0
                 skips.firstOrNull { now >= it.first && now < it.second - 0.25 }?.let { seekTo(it.second) }
-                _loop.value?.let { (a, b) -> if (now >= b - 0.02) seekTo(a) }
+                _loop.value?.let { (a, b) -> if (now >= b - 0.02) { seekTo(a); _loopRepeats.value++ } }
                 _position.value = player.currentPosition / 1000.0
                 delay(33)
             }

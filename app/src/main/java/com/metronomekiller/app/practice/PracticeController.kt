@@ -32,18 +32,26 @@ data class TrainerPlan(val from: Int = 90, val to: Int = 130, val step: Int = 4,
     }
 }
 
-/** Gap click settings: [on] bars of click, then [off] silent ones, repeating. */
-data class GapPlan(val on: Int = 2, val off: Int = 2, val grow: Boolean = false, val randomMute: Int = 0)
+/**
+ * Gap click settings: [on] bars of click, then [off] silent ones, repeating.
+ * [checkTiming] shows a tap pad to see if you drift while the click is gone.
+ */
+data class GapPlan(val on: Int = 2, val off: Int = 2, val grow: Boolean = false, val randomMute: Int = 0, val checkTiming: Boolean = false)
+
+/** One timing-check tap: ms early (−) or late (+), and whether it fell in a silent bar. */
+data class Tap(val ms: Double, val inGap: Boolean)
 
 /**
  * Follows the gap pattern bar by bar, exactly like the C++ engine does
  * (ClickEngine.cpp, "Gap click"), so the screen can say "silent 2 of 3".
  */
-class GapCounter(private val plan: GapPlan) {
-    var barInRound = -1; private set
+class GapCounter(private val plan: GapPlan, lead: Int = 0) {
+    /** Negative while counting in. */
+    var barInRound = -1 - lead; private set
     var round = 0; private set
     val offNow get() = minOf(8, plan.off + if (plan.grow) round else 0)
     val silent get() = barInRound >= plan.on
+    val countingIn get() = barInRound < 0
 
     fun nextBar() {
         if (++barInRound >= plan.on + offNow) { barInRound = 0; round++ }
@@ -74,8 +82,16 @@ class PracticeController(context: Context, private val metronome: MetronomeContr
         store.getInt("t_every", 4), store.getBoolean("t_restart", false)))
     val trainer: StateFlow<TrainerPlan> = _trainer
     private val _gaps = MutableStateFlow(GapPlan(
-        store.getInt("g_on", 2), store.getInt("g_off", 2), store.getBoolean("g_grow", false), store.getInt("g_mute", 0)))
+        store.getInt("g_on", 2), store.getInt("g_off", 2), store.getBoolean("g_grow", false), store.getInt("g_mute", 0),
+        store.getBoolean("g_timing", false)))
     val gaps: StateFlow<GapPlan> = _gaps
+
+    /** Count-in bars (0, 1 or 2) before the speed trainer or gap pattern begins. */
+    private val _countIn = MutableStateFlow(store.getInt("count_in", 1))
+    val countIn: StateFlow<Int> = _countIn
+    /** While counting in: which count-in bar (1-based), else 0. */
+    private val _countingIn = MutableStateFlow(0)
+    val countingIn: StateFlow<Int> = _countingIn
 
     /** The tool that's playing right now, or null. */
     private val _running = MutableStateFlow<Tool?>(null)
@@ -87,8 +103,8 @@ class PracticeController(context: Context, private val metronome: MetronomeContr
     private val _gapState = MutableStateFlow(Triple(false, 0, 0))
     val gapState: StateFlow<Triple<Boolean, Int, Int>> = _gapState
     /** Timing check: your recent taps, ms early (−) or late (+). */
-    private val _taps = MutableStateFlow<List<Double>>(emptyList())
-    val taps: StateFlow<List<Double>> = _taps
+    private val _taps = MutableStateFlow<List<Tap>>(emptyList())
+    val taps: StateFlow<List<Tap>> = _taps
 
     private var follower: Job? = null
     /** Set once this practice run has actually started playing (see init). */
@@ -119,9 +135,13 @@ class PracticeController(context: Context, private val metronome: MetronomeContr
 
     fun setGaps(p: GapPlan) {
         _gaps.value = p
-        store.edit { putInt("g_on", p.on); putInt("g_off", p.off); putBoolean("g_grow", p.grow); putInt("g_mute", p.randomMute) }
-        if (_running.value == Tool.GAPS) start(Tool.GAPS) // restart the pattern with the new numbers
+        val old = _gaps.value
+        store.edit { putInt("g_on", p.on); putInt("g_off", p.off); putBoolean("g_grow", p.grow); putInt("g_mute", p.randomMute); putBoolean("g_timing", p.checkTiming) }
+        // restart the pattern with the new numbers (showing/hiding the tap pad doesn't need that)
+        if (_running.value == Tool.GAPS && old.copy(checkTiming = p.checkTiming) != p) start(Tool.GAPS)
     }
+
+    fun setCountIn(bars: Int) { _countIn.value = bars.coerceIn(0, 2); store.edit { putInt("count_in", _countIn.value) } }
 
     fun toggle() = if (_running.value != null) stop() else start(_tool.value)
 
@@ -130,32 +150,41 @@ class PracticeController(context: Context, private val metronome: MetronomeContr
         cleanUp()
         sawPlaying = false
         _running.value = t
-        _bar.value = -1
         _taps.value = emptyList()
-        val gapCounter = if (t == Tool.GAPS) GapCounter(_gaps.value) else null
+        // LEARN: the count-in is just bars "before bar 0": the trainer holds its
+        // first tempo and the engine's gap counter starts below zero.
+        val lead = if (t == Tool.TIMING) 0 else _countIn.value
+        val gapCounter = if (t == Tool.GAPS) GapCounter(_gaps.value, lead) else null
         when (t) {
             Tool.SPEED -> metronome.setBpm(_trainer.value.bpmFor(0))
             Tool.GAPS -> {
                 val g = _gaps.value
+                NativeEngine.nSetLeadBars(lead)
                 NativeEngine.nSetGap(g.on, g.off, if (g.grow) 1 else 0)
                 NativeEngine.nSetRandomMute(g.randomMute)
             }
             Tool.TIMING -> Unit
         }
+        _bar.value = -1 - lead
+        _countingIn.value = 0
         follower = scope.launch {
+            var counted = -1                         // bars since play, count-in included
             metronome.beatEvents.collect { e ->
                 if (e.index != 0) return@collect
-                val bar = _bar.value + 1
+                counted++
+                val bar = counted - lead             // negative while counting in
                 _bar.value = bar
+                _countingIn.value = if (bar < 0) counted + 1 else 0
                 if (t == Tool.SPEED) {
                     val plan = _trainer.value
-                    val now = plan.bpmFor(bar)
+                    val now = plan.bpmFor(bar.coerceAtLeast(0))
                     if (metronome.state.value.bpm != now) metronome.setBpm(now) // engine already switched; this updates the screen
-                    val next = plan.bpmFor(bar + 1)
+                    val next = plan.bpmFor((bar + 1).coerceAtLeast(0))
                     if (next != now) NativeEngine.nSetTempoAtNextBar(metronome.state.value.meter.beatsPerMinute(next))
                 }
                 gapCounter?.let { c ->
                     c.nextBar()
+                    if (c.countingIn) { _gapState.value = Triple(false, 0, 0); return@let }
                     val len = if (c.silent) c.offNow else _gaps.value.on
                     val pos = if (c.silent) c.barInRound - _gaps.value.on + 1 else c.barInRound + 1
                     _gapState.value = Triple(c.silent, pos, len)
@@ -173,10 +202,12 @@ class PracticeController(context: Context, private val metronome: MetronomeContr
     private fun cleanUp() {
         follower?.cancel(); follower = null
         NativeEngine.nSetGap(0, 0, 0)
+        NativeEngine.nSetLeadBars(0)
         NativeEngine.nSetRandomMute(0)
         NativeEngine.nSetTempoAtNextBar(-1.0)
         _running.value = null
         _gapState.value = Triple(false, 0, 0)
+        _countingIn.value = 0
     }
 
     /**
@@ -184,7 +215,8 @@ class PracticeController(context: Context, private val metronome: MetronomeContr
      * half a beat from any click are ignored (you were between beats).
      */
     fun tap(tapNs: Long) {
-        if (_running.value != Tool.TIMING) return
+        val r = _running.value
+        if (r != Tool.TIMING && !(r == Tool.GAPS && _gaps.value.checkTiming)) return
         val raw = metronome.tapOffsetMs(tapNs) ?: return
         // The engine knows when the sound left the phone; your calibrated offset
         // adds the part it can't see (Bluetooth), same as Settings → Audio sync.
@@ -192,7 +224,7 @@ class PracticeController(context: Context, private val metronome: MetronomeContr
         val s = metronome.state.value
         val beatMs = 60_000.0 / s.meter.beatsPerMinute(s.bpm)
         if (abs(d) > beatMs / 2) return
-        _taps.value = (_taps.value + d).takeLast(MAX_TAPS)
+        _taps.value = (_taps.value + Tap(d, r == Tool.GAPS && _gapState.value.first)).takeLast(MAX_TAPS)
     }
 
     companion object {

@@ -36,6 +36,7 @@ JNIEXPORT void JNICALL JNI_FN(nSetSound)(JNIEnv*, jobject, jint s) { engine()->s
 JNIEXPORT void JNICALL JNI_FN(nSetLastBeatFraction)(JNIEnv*, jobject, jdouble f) { engine()->setLastBeatFraction(f); }
 JNIEXPORT void JNICALL JNI_FN(nSetVolume)(JNIEnv*, jobject, jfloat v) { engine()->setVolume(v); }
 JNIEXPORT void JNICALL JNI_FN(nSetGap)(JNIEnv*, jobject, jint on, jint off, jint grow) { engine()->setGap(on, off, grow); }
+JNIEXPORT void JNICALL JNI_FN(nSetLeadBars)(JNIEnv*, jobject, jint bars) { engine()->setLeadBars(bars); }
 JNIEXPORT void JNICALL JNI_FN(nSetRandomMute)(JNIEnv*, jobject, jint pct) { engine()->setRandomMute(pct); }
 JNIEXPORT void JNICALL JNI_FN(nSetTempoAtNextBar)(JNIEnv*, jobject, jdouble bpm) { engine()->setTempoAtNextBar(bpm); }
 

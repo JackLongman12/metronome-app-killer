@@ -78,6 +78,12 @@ fun SongScreen(song: Song, metronome: MetronomeController, library: SongLibrary,
     var showMix by remember { mutableStateOf(false) }
     val rowsView by prefs.partRows.collectAsStateWithLifecycle()
     val loop by player.loop.collectAsStateWithLifecycle()
+    val loopRepeats by player.loopRepeats.collectAsStateWithLifecycle()
+    // "Speed up" practice: a looped part starts at 70 % and gets 5 % faster each time round, up to 100 %.
+    var rampOn by remember { mutableStateOf(false) }
+    LaunchedEffect(rampOn, loop, loopRepeats) {
+        if (rampOn && loop != null) player.setSpeed((RAMP_START + RAMP_STEP * loopRepeats).coerceAtMost(1f))
+    }
     var renaming by remember { mutableStateOf<PartRow?>(null) }
     // Edit mode: a selected stretch of rows (first..last row index) and an undo history
     var editing by remember { mutableStateOf(false) }
@@ -234,9 +240,25 @@ fun SongScreen(song: Song, metronome: MetronomeController, library: SongLibrary,
                     .background(MaterialTheme.colorScheme.surfaceVariant).padding(horizontal = 12.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("Looping ${r?.let { it.name ?: it.range } ?: "a part"}", style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
-                Text("Stop loop", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.clickable { player.clearLoop(); tick() }.padding(start = 8.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Looping ${r?.let { it.name ?: it.range } ?: "a part"}", style = MaterialTheme.typography.labelMedium)
+                    Text(
+                        if (rampOn) "Speeding up: ${(speed * 100).toInt()}% · round ${loopRepeats + 1}" else "Round ${loopRepeats + 1}",
+                        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Text(if (rampOn) "Steady speed" else "Speed up", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.clickable {
+                        rampOn = !rampOn
+                        if (!rampOn) player.setSpeed(1f)
+                        tick()
+                    }.padding(start = 8.dp))
+                Text("Stop", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.clickable {
+                        player.clearLoop()
+                        if (rampOn) { rampOn = false; player.setSpeed(1f) }
+                        tick()
+                    }.padding(start = 12.dp))
             }
         }
         if (showRows) PartRowsList(
@@ -383,6 +405,9 @@ fun SongScreen(song: Song, metronome: MetronomeController, library: SongLibrary,
         }
     }
 }
+
+private const val RAMP_START = 0.7f
+private const val RAMP_STEP = 0.05f
 
 /** Song and click volume, independently. */
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
