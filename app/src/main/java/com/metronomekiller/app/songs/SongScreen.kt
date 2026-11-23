@@ -32,6 +32,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -57,17 +58,23 @@ import com.metronomekiller.app.ui.rememberTick
  * - bottom (thumb zone): previous part / play / next part, click on/off, speed
  */
 @Composable
-fun SongScreen(song: Song, metronome: MetronomeController, onBack: () -> Unit) {
+fun SongScreen(song: Song, metronome: MetronomeController, library: SongLibrary, onBack: () -> Unit) {
     val map = song.map ?: return
     val context = LocalContext.current
     val tick = rememberTick()
-    val player = remember(song.id) { SongPlayer(context).also { it.load(song.uri, map) } }
+    val player = remember(song.id) { SongPlayer(context).also { it.load(song.uri, map); it.setSkips(song.skips) } }
     DisposableEffect(player) { onDispose { player.release() } }
 
     val pos by player.position.collectAsStateWithLifecycle()
     val playing by player.playing.collectAsStateWithLifecycle()
     val clickOn by player.clickOn.collectAsStateWithLifecycle()
     val speed by player.speed.collectAsStateWithLifecycle()
+    val prefs = metronome.prefs
+    val songLevel by prefs.songLevel.collectAsStateWithLifecycle()
+    val clickLevel by prefs.songClickLevel.collectAsStateWithLifecycle()
+    LaunchedEffect(songLevel, clickLevel) { player.setLevels(songLevel, clickLevel) }
+    LaunchedEffect(song.offsetMs) { player.setOffsetMs(song.offsetMs) }
+    var showMix by remember { mutableStateOf(false) }
 
     // The metronome and the song shouldn't click over each other.
     LaunchedEffect(playing) { if (playing) metronome.stop() }
@@ -200,9 +207,55 @@ fun SongScreen(song: Song, metronome: MetronomeController, onBack: () -> Unit) {
                 Text("⏭", fontSize = 20.sp)
             }
         }
+        if (song.skips.isNotEmpty()) Text(
+            "Skipping ${song.skips.size} non-music part${if (song.skips.size > 1) "s" else ""} (SponsorBlock)",
+            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+        )
+        if (showMix) MixSheet(
+            songLevel, clickLevel, prefs::setSongLevel, prefs::setSongClickLevel,
+            offsetMs = song.offsetMs, onOffset = { library.setOffset(song.id, it) },
+        ) { showMix = false }
         Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally)) {
             Chip(if (clickOn) "Click on" else "Click off", clickOn) { player.setClickOn(!clickOn) }
             Chip("Speed ${(speed * 100).toInt()}%", speed != 1f) { player.cycleSpeed() }
+            Chip("Mix", showMix) { showMix = true }
+        }
+    }
+}
+
+/** Song and click volume, independently. */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun MixSheet(
+    song: Float, click: Float, onSong: (Float) -> Unit, onClick: (Float) -> Unit,
+    offsetMs: Int, onOffset: (Int) -> Unit, onDismiss: () -> Unit,
+) {
+    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 32.dp)) {
+            Text("Mix", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(12.dp))
+            Text("Song volume · ${(song * 100).toInt()}%")
+            Slider(value = song, onValueChange = onSong, valueRange = 0f..1f)
+            Text("Click volume · ${(click * 100).toInt()}%")
+            Slider(value = click, onValueChange = onClick, valueRange = 0f..2f)
+            Spacer(Modifier.height(8.dp))
+            Text("Click timing · ${if (offsetMs > 0) "+" else ""}$offsetMs ms")
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Chip("Earlier", false) { onOffset((offsetMs - 10).coerceAtLeast(-300)) }
+                Chip("Reset", false) { onOffset(0) }
+                Chip("Later", false) { onOffset((offsetMs + 10).coerceAtMost(300)) }
+            }
+            Text(
+                "If the click sounds a little early or late against this song, nudge it here (10 ms per tap). Saved per song.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+            )
+            Text(
+                "Tip: turn the song down to hear your own playing against the click.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

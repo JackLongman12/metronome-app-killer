@@ -10,6 +10,7 @@ import com.metronomekiller.app.analysis.BeatModel
 import com.metronomekiller.app.analysis.BeatPipeline
 import com.metronomekiller.app.analysis.TempoMap
 import com.metronomekiller.app.analysis.TempoMapBuilder
+import com.metronomekiller.app.links.Links
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -40,6 +41,14 @@ data class Song(
     val addedAt: Long,
     val map: TempoMap? = null,
     val status: SongStatus = SongStatus.Queued,
+    /** YouTube/SoundCloud page this came from (null for files on the phone). */
+    val link: String? = null,
+    /** Playlist it was imported with, if any. */
+    val playlist: String? = null,
+    /** Non-music stretches to skip during playback (SponsorBlock), in seconds. */
+    val skips: List<Pair<Double, Double>> = emptyList(),
+    /** Timing nudge for this song's clicks, in ms (+ later, - earlier). */
+    val offsetMs: Int = 0,
 )
 
 /**
@@ -60,9 +69,14 @@ class SongLibrary(private val context: Context) {
     private val dir = File(context.filesDir, "songs").apply { mkdirs() }
     private val index = File(dir, "index.json")
     private val queue = Mutex()
+    private val audioDir = File(dir, "audio")
 
     private val _songs = MutableStateFlow(load())
     val songs: StateFlow<List<Song>> = _songs
+
+    /** Message while a pasted link is being looked up (null when idle). */
+    private val _linkStatus = MutableStateFlow<String?>(null)
+    val linkStatus: StateFlow<String?> = _linkStatus
 
     init {
         // Anything that was mid-analysis when the app closed gets another go.
@@ -83,9 +97,50 @@ class SongLibrary(private val context: Context) {
         analyse(song.id)
     }
 
+    /**
+     * Add a YouTube/SoundCloud video or playlist link. A playlist adds every song
+     * in playlist order, each analysed in turn.
+     */
+    fun addLink(text: String) {
+        val url = Links.findUrl(text) ?: text.trim()
+        _linkStatus.value = "Looking up the link…"
+        scope.launch {
+            try {
+                when (val r = Links.resolve(url)) {
+                    is Links.Resolved.Single -> {
+                        val s = Song(UUID.randomUUID().toString(), r.item.title, r.item.artist, "", System.currentTimeMillis(), link = r.item.url)
+                        _songs.update { listOf(s) + it }
+                        save(); analyse(s.id)
+                    }
+                    is Links.Resolved.Playlist -> {
+                        val now = System.currentTimeMillis()
+                        val added = r.items.mapIndexed { i, it ->
+                            Song(UUID.randomUUID().toString(), it.title, it.artist, "", now - i, link = it.url, playlist = r.name)
+                        }
+                        _songs.update { added + it }
+                        save(); added.forEach { analyse(it.id) }
+                    }
+                }
+                _linkStatus.value = null
+            } catch (e: Throwable) {
+                _linkStatus.value = "Couldn't open that link: ${e.message ?: e.javaClass.simpleName}"
+            }
+        }
+    }
+
+    fun setOffset(id: String, ms: Int) {
+        _songs.update { list -> list.map { if (it.id == id) it.copy(offsetMs = ms) else it } }
+        save()
+    }
+
+    fun clearLinkStatus() { _linkStatus.value = null }
+
     fun remove(id: String) {
+        val song = song(id)
         _songs.update { list -> list.filterNot { it.id == id } }
         File(dir, "$id.json").delete()
+        // Downloaded audio belongs to us; files from the phone are left alone.
+        if (song?.link != null) audioDir.listFiles { f -> f.name.startsWith(id) }?.forEach { it.delete() }
         save()
     }
 
@@ -99,8 +154,19 @@ class SongLibrary(private val context: Context) {
         setStatus(id, SongStatus.Queued)
         scope.launch {
             queue.withLock {
-                val song = song(id) ?: return@withLock
+                var song = song(id) ?: return@withLock
                 try {
+                    // Links: download the audio first (once), and look up parts to skip.
+                    if (song.link != null && (song.uri.isEmpty() || !File(Uri.parse(song.uri).path ?: "").exists())) {
+                        setStatus(id, SongStatus.Working("Downloading audio", 0f))
+                        val file = Links.downloadAudio(song.link!!, audioDir, id) { p ->
+                            setStatus(id, SongStatus.Working("Downloading audio", p))
+                        }
+                        val skips = Links.youtubeId(song.link!!)?.let { Links.sponsorSegments(it) } ?: emptyList()
+                        _songs.update { list -> list.map { if (it.id == id) it.copy(uri = Uri.fromFile(file).toString(), skips = skips) else it } }
+                        save()
+                        song = song(id) ?: return@withLock
+                    }
                     if (!BeatModel.isDownloaded(context)) {
                         BeatModel.ensureDownloaded(context) { p ->
                             setStatus(id, SongStatus.Working("Downloading the beat model (${BeatModel.SIZE_MB} MB)", p))
@@ -150,8 +216,11 @@ class SongLibrary(private val context: Context) {
             val id = o.getString("id")
             val mapFile = File(dir, "$id.json")
             val map = if (mapFile.exists()) runCatching { TempoMap.fromJson(JSONObject(mapFile.readText())) }.getOrNull() else null
+            val skips = o.optJSONArray("skips")?.let { a -> List(a.length()) { a.getJSONArray(it).let { p -> p.getDouble(0) to p.getDouble(1) } } }
             Song(id, o.getString("title"), o.optString("artist"), o.getString("uri"), o.getLong("addedAt"),
-                map, if (map != null) SongStatus.Ready else SongStatus.Queued)
+                map, if (map != null) SongStatus.Ready else SongStatus.Queued,
+                link = o.optString("link").ifEmpty { null }, playlist = o.optString("playlist").ifEmpty { null },
+                skips = skips ?: emptyList(), offsetMs = o.optInt("offsetMs", 0))
         }
     }.getOrDefault(emptyList())
 
@@ -159,6 +228,9 @@ class SongLibrary(private val context: Context) {
         val arr = JSONArray(_songs.value.map {
             JSONObject().put("id", it.id).put("title", it.title).put("artist", it.artist)
                 .put("uri", it.uri).put("addedAt", it.addedAt)
+                .put("offsetMs", it.offsetMs)
+                .put("link", it.link ?: "").put("playlist", it.playlist ?: "")
+                .put("skips", JSONArray(it.skips.map { (a, b) -> JSONArray(listOf(a, b)) }))
         })
         index.writeText(arr.toString())
     }

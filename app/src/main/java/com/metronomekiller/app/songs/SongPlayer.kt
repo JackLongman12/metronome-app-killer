@@ -69,6 +69,11 @@ class SongPlayer(context: Context) {
         })
     }
 
+    private var skips: List<Pair<Double, Double>> = emptyList()
+
+    /** Stretches to jump over while playing (SponsorBlock: sponsor reads, talking...). */
+    fun setSkips(list: List<Pair<Double, Double>>) { skips = list }
+
     fun load(uri: String, map: TempoMap) {
         mixer.setClicks(map)
         mixer.startAt(0.0)
@@ -88,6 +93,12 @@ class SongPlayer(context: Context) {
 
     fun setClickOn(on: Boolean) { _clickOn.value = on; mixer.enabled = on }
 
+    /** Shift every click by [ms] milliseconds (fixes a song whose clicks sound early or late). */
+    fun setOffsetMs(ms: Int) { mixer.offset = ms / 1000.0 }
+
+    /** Mix levels: the song (0..1) and the click (0..2). Applied instantly, in the audio stream. */
+    fun setLevels(song: Float, click: Float) { mixer.songGain = song; mixer.clickGain = click }
+
     /** 0.5x to 1.0x practice speed (pitch stays the same). */
     fun cycleSpeed() {
         val next = when (_speed.value) { 1f -> 0.75f; 0.75f -> 0.5f; else -> 1f }
@@ -104,6 +115,8 @@ class SongPlayer(context: Context) {
         ticker?.cancel()
         ticker = scope.launch {
             while (isActive) {
+                val now = player.currentPosition / 1000.0
+                skips.firstOrNull { now >= it.first && now < it.second - 0.25 }?.let { seekTo(it.second) }
                 _position.value = player.currentPosition / 1000.0
                 delay(33)
             }
@@ -118,9 +131,14 @@ class SongPlayer(context: Context) {
  */
 private class ClickMixer : BaseAudioProcessor() {
     @Volatile var enabled = true
+    /** Song level 0..1 and click level 0..2 (above 1 = louder than the default). */
+    @Volatile var songGain = 1f
+    @Volatile var clickGain = 1f
     @Volatile private var times = DoubleArray(0)
     @Volatile private var accents = BooleanArray(0)
     @Volatile private var pendingStart = 0.0
+    /** Per-song timing correction: positive = clicks later, negative = earlier (seconds). */
+    @Volatile var offset = 0.0
 
     private var rate = 44100
     private var channels = 2
@@ -156,10 +174,22 @@ private class ClickMixer : BaseAudioProcessor() {
         }
     }
 
-    override fun onFlush() {
-        // A flush happens on every seek: restart our clock at the new position.
-        frame = (pendingStart * rate).toLong()
-        val t = pendingStart
+    override fun onFlush(streamMetadata: AudioProcessor.StreamMetadata) {
+        // A flush happens on every seek. ExoPlayer tells us where the audio
+        // really resumes (MP3 seeks can land a little off the requested spot);
+        // if that value looks unusable we fall back to the position we asked for.
+        val actual = streamMetadata.positionOffsetUs / 1e6
+        val start = if (streamMetadata !== AudioProcessor.StreamMetadata.DEFAULT &&
+            streamMetadata.positionOffsetUs != C.TIME_UNSET && kotlin.math.abs(actual - pendingStart) < 2.0
+        ) actual else pendingStart
+        restartAt(start)
+    }
+
+    override fun onFlush() = restartAt(pendingStart)
+
+    private fun restartAt(pos: Double) {
+        frame = (pos * rate).toLong()
+        val t = pos - offset
         next = times.indexOfFirst { it >= t - 0.001 }.let { if (it < 0) times.size else it }
         voice = null
     }
@@ -173,16 +203,19 @@ private class ClickMixer : BaseAudioProcessor() {
         val frames = bytes / 2 / channels
         val ts = times
         val ac = accents
+        val sg = songGain
+        val cg = clickGain
         for (f in 0 until frames) {
             // Start a click when we reach its sample.
-            while (next < ts.size && (ts[next] * rate).toLong() <= frame) {
+            val off = offset
+            while (next < ts.size && ((ts[next] + off) * rate).toLong() <= frame) {
                 if (enabled) { voice = if (ac[next]) accentVoice else normalVoice; voicePos = 0 }
                 next++
             }
             val v = voice
-            val add = if (v != null && voicePos < v.size) v[voicePos++] * 32767f else 0f
+            val add = if (v != null && voicePos < v.size) v[voicePos++] * 32767f * cg else 0f
             for (c in 0 until channels) {
-                val s = inS.get() + add
+                val s = inS.get() * sg + add
                 outS.put(s.coerceIn(-32768f, 32767f).toInt().toShort())
             }
             frame++

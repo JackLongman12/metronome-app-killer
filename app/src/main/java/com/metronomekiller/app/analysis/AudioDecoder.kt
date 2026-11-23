@@ -39,6 +39,12 @@ object AudioDecoder {
         codec.configure(format, null, null, 0)
         codec.start()
 
+        // LEARN — encoder delay: MP3/AAC files start with a few hundred to ~2000
+        // samples of padding the encoder needs. Players skip it ("gapless"
+        // playback); if analysis didn't, every beat would come out ~25-50 ms
+        // late against what you hear. The file tells us how much to skip.
+        var skipFrames = if (format.containsKey("encoder-delay")) format.getInteger("encoder-delay") else 0
+
         var resampler: StreamResampler? = null
         var channels = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
         var floatPcm = false
@@ -94,9 +100,16 @@ object AudioDecoder {
                                 mono[i] = s / channels
                             }
                         }
+                        var start = 0
+                        if (skipFrames > 0) {
+                            start = minOf(skipFrames, frames)
+                            skipFrames -= start
+                        }
+                        if (start > 0) System.arraycopy(mono, start, mono, 0, frames - start)
+                        val usable = frames - start
                         val rs = resampler ?: StreamResampler(format.getInteger(MediaFormat.KEY_SAMPLE_RATE), TARGET_RATE)
                             .also { resampler = it }
-                        rs.process(mono, frames, out)
+                        rs.process(mono, usable, out)
                         if (durationUs > 0) onProgress((info.presentationTimeUs.toFloat() / durationUs).coerceIn(0f, 1f))
                         codec.releaseOutputBuffer(outIndex, false)
                         if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) outputDone = true

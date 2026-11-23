@@ -34,6 +34,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.metronomekiller.app.analysis.Section
 
@@ -58,6 +64,36 @@ fun SongsScreen(library: SongLibrary, onOpen: (String) -> Unit) {
         Spacer(Modifier.height(12.dp))
         Text("Songs", style = MaterialTheme.typography.headlineSmall)
         Spacer(Modifier.height(12.dp))
+        // Paste a YouTube / SoundCloud link (a video or a whole playlist)
+        val linkStatus by library.linkStatus.collectAsStateWithLifecycle()
+        var link by remember { mutableStateOf("") }
+        val clipboard = LocalClipboardManager.current
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = link,
+                onValueChange = { link = it; library.clearLinkStatus() },
+                placeholder = { Text("Paste a YouTube or SoundCloud link") },
+                singleLine = true,
+                modifier = Modifier.weight(1f),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go),
+                keyboardActions = KeyboardActions(onGo = { if (link.isNotBlank()) { library.addLink(link); link = "" } }),
+            )
+            Spacer(Modifier.width(8.dp))
+            Button(
+                onClick = {
+                    val text = link.ifBlank { clipboard.getText()?.text ?: "" }
+                    if (text.isNotBlank()) { library.addLink(text); link = "" }
+                },
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.height(56.dp),
+            ) { Text(if (link.isBlank()) "Paste" else "Add") }
+        }
+        linkStatus?.let {
+            Text(it, style = MaterialTheme.typography.bodySmall,
+                color = if (it.startsWith("Couldn't")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp))
+        }
+        Spacer(Modifier.height(10.dp))
         Button(
             onClick = { pick.launch(arrayOf("audio/*")) },
             modifier = Modifier.fillMaxWidth().height(48.dp),
@@ -65,7 +101,7 @@ fun SongsScreen(library: SongLibrary, onOpen: (String) -> Unit) {
             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
         ) { Text("+ Add a song from your phone") }
         Text(
-            "YouTube, SoundCloud and Spotify links (and playlists) are coming next.",
+            "Playlist links add every song. You can also share a video from the YouTube app to here.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 6.dp, bottom = 8.dp),
@@ -112,7 +148,10 @@ private fun SongRow(song: Song, onOpen: () -> Unit, onDelete: () -> Unit, onRetr
             Box {
                 TextButton(onClick = { menu = true }) { Text("•••") }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                    if (song.status is SongStatus.Failed) DropdownMenuItem(text = { Text("Try again") }, onClick = { menu = false; onRetry() })
+                    DropdownMenuItem(
+                        text = { Text(if (song.status is SongStatus.Failed) "Try again" else "Analyse again") },
+                        onClick = { menu = false; onRetry() },
+                    )
                     DropdownMenuItem(text = { Text("Remove") }, onClick = { menu = false; onDelete() })
                 }
             }

@@ -95,7 +95,29 @@ class MainActivity : ComponentActivity() {
     private val metronome get() = App.from(this).metronome
     private val updates: UpdateViewModel by viewModels()
 
+    /** Set when a link is shared to the app, so the UI can jump to the Songs tab. */
+    private val sharedLink = androidx.compose.runtime.mutableStateOf<String?>(null)
+
+    /**
+     * LEARN: when you tap Share → Metronome Killer in the YouTube app, Android starts
+     * (or brings back) this activity with an ACTION_SEND intent carrying the link
+     * as text. onCreate handles a cold start, onNewIntent a running app.
+     */
+    private fun handleShare(intent: android.content.Intent?) {
+        if (intent?.action != android.content.Intent.ACTION_SEND) return
+        val text = intent.getStringExtra(android.content.Intent.EXTRA_TEXT) ?: return
+        val url = com.metronomekiller.app.links.Links.findUrl(text) ?: return
+        App.from(this).songs.addLink(url)
+        sharedLink.value = url
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        handleShare(intent)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
+        handleShare(intent)
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         // Make the phone's volume buttons control media (our click) volume,
@@ -132,6 +154,9 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun App() {
         var tab by rememberSaveable { mutableStateOf(Tab.METRONOME) }
+        // A link shared from YouTube: show it arriving in Songs.
+        val shared by sharedLink
+        LaunchedEffect(shared) { if (shared != null) { tab = Tab.SONGS; sharedLink.value = null } }
         var screen by rememberSaveable { mutableStateOf(Screen.MAIN) }
         var openSong by rememberSaveable { mutableStateOf<String?>(null) } // id of the song being viewed
         val prefs = metronome.prefs
@@ -209,7 +234,7 @@ class MainActivity : ComponentActivity() {
                     Tab.SONGS -> {
                         val library = App.from(this@MainActivity).songs
                         val song = openSong?.let { library.song(it) }
-                        if (song?.map != null) SongScreen(song, metronome, onBack = { openSong = null })
+                        if (song?.map != null) SongScreen(song, metronome, library, onBack = { openSong = null })
                         else SongsScreen(library, onOpen = { openSong = it })
                     }
                     Tab.PRACTICE -> EmptyState(
