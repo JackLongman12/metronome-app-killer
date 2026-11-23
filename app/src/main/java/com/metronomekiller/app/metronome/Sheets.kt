@@ -47,7 +47,6 @@ import com.metronomekiller.app.engine.ClickSound
 import com.metronomekiller.app.engine.Meter
 import com.metronomekiller.app.engine.TimeSignaturePreset
 import com.metronomekiller.app.ui.AppIcons
-import kotlin.math.abs
 
 /**
  * Time signature picker: common presets, scroll wheels, rows of experimental
@@ -97,12 +96,17 @@ fun TimeSignatureSheet(
                     )
                     Text("/", fontSize = 30.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 12.dp))
-                    val dens = listOf(2, 4, 8, 16)
+                    // Normal bottom numbers plus the irrational ones (3, 5, 6...); a custom
+                    // decimal like 3.2 is added so the wheel can always show the real value.
+                    val dens = remember(meter.denominator) {
+                        (listOf(1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 10.0, 12.0, 16.0, 32.0) + meter.denominator).distinct().sorted()
+                    }
                     Wheel(
                         items = dens,
-                        selected = dens.minBy { abs(it - meter.denominator) },
-                        onSelected = { meter = meter.copy(denominator = it.toDouble()); presetPattern = null },
+                        selected = meter.denominator,
+                        onSelected = { meter = meter.copy(denominator = it); presetPattern = null },
                         modifier = Modifier.weight(1f),
+                        label = { Meter.fmt(it) },
                     )
                 }
             }

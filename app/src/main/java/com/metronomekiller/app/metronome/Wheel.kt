@@ -64,9 +64,13 @@ fun <T> Wheel(
 
     // Report the choice once a scroll settles — but only scrolls that actually
     // happened, so merely opening the sheet never overwrites a custom value.
+    // LEARN: our own animated scroll (following a preset) also counts as "scrolling"
+    // to the list, so we flag it; otherwise a wheel missing that value would land on
+    // a neighbour and report it as your pick (this turned 4/3 into 4/2).
     var scrolled by remember { mutableStateOf(false) }
+    var following by remember { mutableStateOf(false) }
     LaunchedEffect(listState.isScrollInProgress) {
-        if (listState.isScrollInProgress) scrolled = true
+        if (listState.isScrollInProgress) { if (!following) scrolled = true }
         else if (scrolled) {
             scrolled = false
             items.getOrNull(centered)?.let { if (it != selected) select(it) }
@@ -75,7 +79,10 @@ fun <T> Wheel(
     // Follow outside changes (e.g. tapping a preset) by scrolling to the new value.
     LaunchedEffect(selected) {
         val i = items.indexOf(selected)
-        if (i >= 0 && i != centered && !listState.isScrollInProgress) listState.animateScrollToItem(i)
+        if (i >= 0 && i != centered && !listState.isScrollInProgress) {
+            following = true
+            try { listState.animateScrollToItem(i) } finally { following = false }
+        }
     }
 
     Box(modifier.height(rowHeight * 3), contentAlignment = Alignment.Center) {
