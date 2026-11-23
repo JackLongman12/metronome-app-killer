@@ -151,7 +151,7 @@ enum TempoMapBuilder {
         var runs: [(Int, Int)] = []
         var start = 0
         if beats.count > 2 {
-            let ibi = (0..<beats.count - 1).map { beats[$0 + 1] - beats[$0] }
+            let ibi: [Double] = (0..<(beats.count - 1)).map { (k: Int) -> Double in beats[k + 1] - beats[k] }
             for i in ibi.indices {
                 let local = median(ibi, max(0, i - 4), min(ibi.count, i + 5))
                 if ibi[i] > GAP_FACTOR * local { runs.append((start, i + 1)); start = i + 1 }
@@ -194,7 +194,7 @@ enum TempoMapBuilder {
     // 1 ──────────────────────────────────────────────────────────────────────
     private static func regularize(_ beats: [Double]) -> [Double] {
         if beats.count < 8 { return beats }
-        let ibi = (0..<beats.count - 1).map { beats[$0 + 1] - beats[$0] }
+        let ibi: [Double] = (0..<(beats.count - 1)).map { (k: Int) -> Double in beats[k + 1] - beats[k] }
         var out = [beats[0]]
         for i in ibi.indices {
             let r = ibi[i] / median(ibi, max(0, i - 8), min(ibi.count, i + 9))
@@ -210,7 +210,11 @@ enum TempoMapBuilder {
     }
 
     private static func dominantBpm(_ beats: [Double]) -> Double {
-        let bpm = (0..<beats.count - 1).map { 60 / (beats[$0 + 1] - beats[$0]) }.filter { $0 > 40 && $0 < 320 }
+        var bpm: [Double] = []
+        for i in 0..<(beats.count - 1) {
+            let b: Double = 60.0 / (beats[i + 1] - beats[i])
+            if b > 40 && b < 320 { bpm.append(b) }
+        }
         if bpm.isEmpty { return 0 }
         var hist = [Int](repeating: 0, count: 280)
         for b in bpm { hist[Int(b - 40).clamped(0, 279)] += 1 }
@@ -271,7 +275,7 @@ enum TempoMapBuilder {
     // 3 ──────────────────────────────────────────────────────────────────────
     private static func fixOctaves(_ secs: [Seg], _ mainBpm: Double) {
         if secs.count < 2 { return }
-        let w = secs.map { Double($0.t.count) * 60 / $0.bpm }
+        let w: [Double] = secs.map { (x: Seg) -> Double in Double(x.t.count) * 60.0 / x.bpm }
         let total = w.reduce(0, +)
         for (i, s) in secs.enumerated() {
             let neigh = [i > 0 ? secs[i - 1].bpm : nil, i + 1 < secs.count ? secs[i + 1].bpm : nil].compactMap { $0 }
@@ -279,7 +283,8 @@ enum TempoMapBuilder {
             for f in [2.0, 0.5] {
                 if abs(s.bpm * f - ref) / ref < OCTAVE_TOL && w[i] < total * 0.5 {
                     if f == 2.0 {
-                        let mids = (0..<s.t.count - 1).map { (s.t[$0] + s.t[$0 + 1]) / 2 }
+                        var mids: [Double] = []
+                        for j in 0..<(s.t.count - 1) { mids.append((s.t[j] + s.t[j + 1]) / 2.0) }
                         s.t = (s.t + mids).sorted()
                     } else {
                         s.t = (0..<(s.t.count + 1) / 2).map { s.t[$0 * 2] }

@@ -99,8 +99,7 @@ enum YtDlp {
                 let errText = String(decoding: errBox.all(), as: UTF8.self)
                 if proc.terminationStatus == 0 { cont.resume(returning: String(decoding: all, as: UTF8.self)) }
                 else {
-                    let msg = errText.split(separator: "
-").last { $0.contains("ERROR") }.map(String.init) ?? "yt-dlp failed"
+                    let msg = errText.split(separator: "\n").last { $0.contains("ERROR") }.map(String.init) ?? "yt-dlp failed"
                     cont.resume(throwing: UpdateError(msg.replacingOccurrences(of: "ERROR: ", with: "")))
                 }
             }
@@ -121,8 +120,7 @@ final class OutputBox: @unchecked Sendable {
         data.append(chunk)
         partial += String(decoding: chunk, as: UTF8.self)
         var lines: [String] = []
-        while let nl = partial.firstIndex(of: "
-") {
+        while let nl = partial.firstIndex(of: "\n") {
             lines.append(String(partial[..<nl]))
             partial = String(partial[partial.index(after: nl)...])
         }
