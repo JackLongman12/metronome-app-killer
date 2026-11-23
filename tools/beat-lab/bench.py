@@ -33,7 +33,11 @@ def model_output(wav: Path, cache: Path, model: str):
     c = cache / f"{wav.stem}.{model}.npz"
     if c.exists():
         z = np.load(c)
-        return z["beat"], z["downbeat"], z["beats"], z["downbeats"], float(z["secs"])
+        # Other models (run_other_model.py) only store beat/downbeat times, no activations.
+        act = lambda k: z[k] if k in z.files else None
+        return act("beat"), act("downbeat"), z["beats"], z["downbeats"], float(z["secs"])
+    if model != "final0":
+        return None
     from beat_this.inference import Audio2Frames, Postprocessor, load_audio
     if not hasattr(model_output, "a2f"):
         model_output.a2f = Audio2Frames(checkpoint_path=model, device="cpu")
@@ -136,7 +140,10 @@ def main():
         if not wav.exists():
             continue
         truth = smooth_truth(json.loads(tp.read_text()))
-        _, db_act, beats, downbeats, secs = model_output(wav, cache, a.model)
+        out = model_output(wav, cache, a.model)
+        if out is None:
+            continue  # this model hasn't processed this song yet
+        _, db_act, beats, downbeats, secs = out
         dur = sf.info(str(wav)).duration
         tm = tempo_map.build(beats, downbeats, dur, downbeat_activation=db_act)
         r = {"song": name, "group": truth["group"], **score(truth, tm, beats, downbeats),

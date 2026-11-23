@@ -57,7 +57,7 @@ Release builds in CI are signed with a key stored in repository secrets, so ever
 
 ## Credits
 
-- Beat tracking: [beat_this](https://github.com/CPJKU/beat_this) by CPJKU (MIT), downloaded by the app on first use.
+- Beat tracking: [beat_this](https://github.com/CPJKU/beat_this) by CPJKU (MIT), the "Fast" model, and [Masked-Diffusion Beat This](https://github.com/fosfrancesco/md_beat_this) by Foscarin, Korzeniowski and Vogl (research / non-commercial licence), the "Accurate" model. Both are downloaded by the app on first use.
 
 - Fonts in the Comic book theme: [Bangers](https://github.com/googlefonts/bangers) and [Comic Neue](https://github.com/crozynski/comicneue), both under the SIL Open Font License 1.1.
 

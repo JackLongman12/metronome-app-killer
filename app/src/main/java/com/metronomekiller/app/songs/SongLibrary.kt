@@ -8,6 +8,8 @@ import android.provider.OpenableColumns
 import com.metronomekiller.app.analysis.AudioDecoder
 import com.metronomekiller.app.analysis.BeatModel
 import com.metronomekiller.app.analysis.BeatPipeline
+import com.metronomekiller.app.analysis.MdBeatModel
+import com.metronomekiller.app.analysis.ModelFiles
 import com.metronomekiller.app.analysis.TempoMap
 import com.metronomekiller.app.analysis.TempoMapBuilder
 import com.metronomekiller.app.App
@@ -183,7 +185,12 @@ class SongLibrary(private val context: Context) {
                         save()
                         song = song(id) ?: return@withLock
                     }
-                    if (!BeatModel.isDownloaded(context)) {
+                    val accurate = App.from(context).prefs.accurateModel.value
+                    if (accurate && !ModelFiles.isDownloaded(context, MdBeatModel.FILES)) {
+                        ModelFiles.ensure(context, MdBeatModel.FILES) { p ->
+                            setStatus(id, SongStatus.Working("Downloading the accurate beat model (${MdBeatModel.SIZE_MB} MB)", p))
+                        }
+                    } else if (!accurate && !BeatModel.isDownloaded(context)) {
                         BeatModel.ensureDownloaded(context) { p ->
                             setStatus(id, SongStatus.Working("Downloading the beat model (${BeatModel.SIZE_MB} MB)", p))
                         }
@@ -193,10 +200,19 @@ class SongLibrary(private val context: Context) {
                         setStatus(id, SongStatus.Working("Reading the song", p))
                     }
                     setStatus(id, SongStatus.Working("Finding the beats", 0f))
-                    val result = BeatModel.load(context).use { model ->
-                        BeatPipeline.analyse(model, audio.samples) { p -> setStatus(id, SongStatus.Working("Finding the beats", p)) }
+                    val aiMap = if (accurate) {
+                        val r = MdBeatModel.load(context).use { model ->
+                            // 8 refinement passes (as in the paper) up to 6 min; 4 for longer songs so a phone finishes in reasonable time
+                            model.analyse(audio.samples, if (audio.durationSec <= 360) 8 else 4) { p -> setStatus(id, SongStatus.Working("Finding the beats", p)) }
+                        }
+                        TempoMapBuilder.build(r.beats, r.downbeats, audio.durationSec,
+                            MdBeatModel.pseudoDownbeatScores(r.downbeats, audio.durationSec))
+                    } else {
+                        val r = BeatModel.load(context).use { model ->
+                            BeatPipeline.analyse(model, audio.samples) { p -> setStatus(id, SongStatus.Working("Finding the beats", p)) }
+                        }
+                        TempoMapBuilder.build(r.beats, r.downbeats, audio.durationSec, r.downbeatScores)
                     }
-                    val aiMap = TempoMapBuilder.build(result.beats, result.downbeats, audio.durationSec, result.downbeatScores)
                     File(dir, "$id.ai.json").writeText(aiMap.toJson().toString())
 
                     // Songsterr: a human-written tempo map, if this song has a synced tab.

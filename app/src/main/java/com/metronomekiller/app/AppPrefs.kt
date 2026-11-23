@@ -57,6 +57,11 @@ class AppPrefs(context: Context) {
     val songsterr: StateFlow<Boolean> = _songsterr
     fun setSongsterr(on: Boolean) { _songsterr.value = on; prefs.edit { putBoolean("songsterr", on) } }
 
+    /** Beat model for song analysis: true = Masked-Diffusion ("Accurate"), false = beat_this ("Fast"). */
+    private val _accurateModel = MutableStateFlow(prefs.getBoolean("accurate_model", true))
+    val accurateModel: StateFlow<Boolean> = _accurateModel
+    fun setAccurateModel(on: Boolean) { _accurateModel.value = on; prefs.edit { putBoolean("accurate_model", on) } }
+
     private val _vibrate = MutableStateFlow(prefs.getBoolean("vibrate", false))
     val vibrate: StateFlow<Boolean> = _vibrate
     fun setVibrate(on: Boolean) { _vibrate.value = on; prefs.edit { putBoolean("vibrate", on) } }
