@@ -17,3 +17,6 @@ keystore.properties
 tools/beat-lab/.venv/
 tools/beat-lab/audio/
 tools/beat-lab/out/
+tools/beat-lab/audio_syn/
+tools/beat-lab/out_small/
+__pycache__/
