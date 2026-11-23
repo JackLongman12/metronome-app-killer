@@ -53,3 +53,21 @@ Model size for the phone: full model 83 MB as ONNX (23 MB as int8); small model 
 Open issue: running the ONNX export through beat_this's chunking gives low scores (F 0.30) even
 unquantized, so the int8 comparison isn't valid yet. Probably an input-shape or chunking mismatch; to fix
 before porting.
+
+## Benchmark baseline (23 songs, 2026-11-23)
+
+Ground truth = Songsterr tabs with their per-bar video sync, smoothed to remove tap jitter.
+"Fixable" = tempo right, or right after one ×2/÷2 tap (often a notation choice, e.g. 6/8 counted in eighths).
+
+| Group | Songs | Beat F | Downbeat F | Tempo right | Fixable | Bars right |
+|---|---|---|---|---|---|---|
+| CHON | 3 | 0.65 | 0.58 | 51 % | 77 % | 50 % |
+| Complex (Periphery, Dream Theater, Tool, Floyd, Radiohead, Brubeck, Metallica One, Queen) | 11 | 0.68 | 0.47 | 50 % | 71 % | 32 % |
+| Basic 4/4 & 3/4 | 9 | 0.87 | 0.80 | 79 % | 90 % | 73 % |
+| All | 23 | 0.75 | 0.61 | 61 % | 79 % | 50 % |
+
+Basic songs are in good shape; complex and math-rock songs lose mostly on bar lines (downbeats)
+and tempo octave. Four CHON fan tabs (Story, Waterslide, Sleepy Tea, Splash) couldn't be aligned yet
+(their repeats don't match the sync); alternative uploads exist to try.
+
+These songs are the TEST set. Any fine-tuning must use different songs.

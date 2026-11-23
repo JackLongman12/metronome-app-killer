@@ -20,3 +20,4 @@ tools/beat-lab/out/
 tools/beat-lab/audio_syn/
 tools/beat-lab/out_small/
 __pycache__/
+tools/beat-lab/bench/

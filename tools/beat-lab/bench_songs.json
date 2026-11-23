@@ -1,0 +1,165 @@
+{
+ "_about": "Benchmark song list. Only names go in the repo; tabs and audio are fetched locally by build_benchmark.py. songId pins a specific tab when search can't find it (CHON tabs are fan uploads filed under the uploader's name).",
+ "songs": [
+  {
+   "artist": "CHON",
+   "title": "Story",
+   "group": "chon",
+   "songId": 1830247
+  },
+  {
+   "artist": "CHON",
+   "title": "Waterslide",
+   "group": "chon",
+   "songId": 1596387
+  },
+  {
+   "artist": "CHON",
+   "title": "Bubble Dream",
+   "group": "chon",
+   "songId": 1648899
+  },
+  {
+   "artist": "CHON",
+   "title": "Sleepy Tea",
+   "group": "chon",
+   "songId": 1663449
+  },
+  {
+   "artist": "CHON",
+   "title": "Perfect Pillow",
+   "group": "chon",
+   "songId": 1525256
+  },
+  {
+   "artist": "CHON",
+   "title": "Splash",
+   "group": "chon",
+   "songId": 4839074
+  },
+  {
+   "artist": "CHON",
+   "title": "Nayhoo",
+   "group": "chon",
+   "songId": 4920342
+  },
+  {
+   "artist": "Periphery",
+   "title": "Racecar",
+   "group": "complex"
+  },
+  {
+   "artist": "Periphery",
+   "title": "Icarus Lives!",
+   "group": "complex"
+  },
+  {
+   "artist": "Animals As Leaders",
+   "title": "CAFO",
+   "group": "complex"
+  },
+  {
+   "artist": "Polyphia",
+   "title": "G.O.A.T.",
+   "group": "complex"
+  },
+  {
+   "artist": "Tool",
+   "title": "Schism",
+   "group": "complex"
+  },
+  {
+   "artist": "Dave Brubeck",
+   "title": "Take Five",
+   "group": "complex"
+  },
+  {
+   "artist": "Pink Floyd",
+   "title": "Money",
+   "group": "complex"
+  },
+  {
+   "artist": "Radiohead",
+   "title": "15 Step",
+   "group": "complex"
+  },
+  {
+   "artist": "Metallica",
+   "title": "One",
+   "group": "complex"
+  },
+  {
+   "artist": "Queen",
+   "title": "Bohemian Rhapsody",
+   "group": "complex"
+  },
+  {
+   "artist": "Dream Theater",
+   "title": "The Dance Of Eternity",
+   "group": "complex",
+   "songId": 6180
+  },
+  {
+   "artist": "Dream Theater",
+   "title": "Pull Me Under",
+   "group": "complex",
+   "songId": 6248
+  },
+  {
+   "artist": "Dream Theater",
+   "title": "Metropolis Pt. 1: The Miracle And The Sleeper",
+   "group": "complex",
+   "songId": 67675
+  },
+  {
+   "artist": "The White Stripes",
+   "title": "Seven Nation Army",
+   "group": "basic"
+  },
+  {
+   "artist": "AC/DC",
+   "title": "Back In Black",
+   "group": "basic"
+  },
+  {
+   "artist": "Nirvana",
+   "title": "Smells Like Teen Spirit",
+   "group": "basic"
+  },
+  {
+   "artist": "Michael Jackson",
+   "title": "Billie Jean",
+   "group": "basic"
+  },
+  {
+   "artist": "Oasis",
+   "title": "Wonderwall",
+   "group": "basic"
+  },
+  {
+   "artist": "Green Day",
+   "title": "Basket Case",
+   "group": "basic"
+  },
+  {
+   "artist": "Red Hot Chili Peppers",
+   "title": "Californication",
+   "group": "basic"
+  },
+  {
+   "artist": "Metallica",
+   "title": "Nothing Else Matters",
+   "group": "basic"
+  },
+  {
+   "artist": "The Beatles",
+   "title": "Norwegian Wood",
+   "group": "basic"
+  },
+  {
+   "artist": "Led Zeppelin",
+   "title": "Black Dog",
+   "group": "basic"
+  }
+ ]
+}
