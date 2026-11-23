@@ -74,6 +74,22 @@ class SongPlayer(context: Context) {
     /** Stretches to jump over while playing (SponsorBlock: sponsor reads, talking...). */
     fun setSkips(list: List<Pair<Double, Double>>) { skips = list }
 
+    private val _loop = MutableStateFlow<Pair<Double, Double>?>(null)
+    /** A stretch (start, end in seconds) that repeats while playing, or null. */
+    val loop: StateFlow<Pair<Double, Double>?> = _loop
+
+    /**
+     * Loop a stretch, e.g. one row of bars. LEARN: the ticker below checks the
+     * position ~30 times a second and jumps back when it passes the end; the jump
+     * lands on the loop's first bar line, so the click restarts on beat 1.
+     */
+    fun setLoop(start: Double, end: Double) {
+        _loop.value = start to end
+        val now = player.currentPosition / 1000.0
+        if (now < start || now >= end) seekTo(start)
+    }
+    fun clearLoop() { _loop.value = null }
+
     fun load(uri: String, map: TempoMap) {
         mixer.setClicks(map)
         mixer.startAt(0.0)
@@ -123,6 +139,7 @@ class SongPlayer(context: Context) {
             while (isActive) {
                 val now = player.currentPosition / 1000.0
                 skips.firstOrNull { now >= it.first && now < it.second - 0.25 }?.let { seekTo(it.second) }
+                _loop.value?.let { (a, b) -> if (now >= b - 0.02) seekTo(a) }
                 _position.value = player.currentPosition / 1000.0
                 delay(33)
             }

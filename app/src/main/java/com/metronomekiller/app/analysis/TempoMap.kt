@@ -35,8 +35,9 @@ data class Section(
 /**
  * One bar: where it starts and how many beats it has (songs can change every bar).
  * [noteValue] is the bottom number when known (tabs); the AI assumes 4.
+ * [marker] is a part name starting at this bar ("Verse 1"), from a Songsterr tab.
  */
-data class Bar(val start: Double, val beats: Int, val noteValue: Int = 4) {
+data class Bar(val start: Double, val beats: Int, val noteValue: Int = 4, val marker: String? = null) {
     val meter: String get() = "$beats/$noteValue"
 }
 
@@ -60,7 +61,7 @@ data class TempoMap(
         put("main_bpm", mainBpm)
         put("beats", JSONArray(beats.map { (it * 10000).roundToInt() / 10000.0 }))
         put("downbeats", JSONArray(downbeats.map { (it * 10000).roundToInt() / 10000.0 }))
-        put("bars", JSONArray(bars.map { JSONObject().put("start", it.start).put("beats", it.beats).put("note_value", it.noteValue) }))
+        put("bars", JSONArray(bars.map { JSONObject().put("start", it.start).put("beats", it.beats).put("note_value", it.noteValue).apply { it.marker?.let { m -> put("marker", m) } } }))
         put("sections", JSONArray(sections.map {
             JSONObject().put("start", it.start).put("end", it.end).put("kind", it.kind.name)
                 .put("bpm", it.bpm).put("bpm_end", it.bpmEnd).put("beats_per_bar", it.beatsPerBar)
@@ -72,7 +73,7 @@ data class TempoMap(
     companion object {
         fun fromJson(o: JSONObject): TempoMap {
             fun arr(a: JSONArray) = DoubleArray(a.length()) { a.getDouble(it) }
-            val bars = o.getJSONArray("bars").let { a -> List(a.length()) { a.getJSONObject(it).let { b -> Bar(b.getDouble("start"), b.getInt("beats"), b.optInt("note_value", 4)) } } }
+            val bars = o.getJSONArray("bars").let { a -> List(a.length()) { a.getJSONObject(it).let { b -> Bar(b.getDouble("start"), b.getInt("beats"), b.optInt("note_value", 4), b.optString("marker").ifEmpty { null }) } } }
             val secs = o.getJSONArray("sections").let { a ->
                 List(a.length()) {
                     val s = a.getJSONObject(it)

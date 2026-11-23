@@ -76,6 +76,9 @@ fun SongScreen(song: Song, metronome: MetronomeController, library: SongLibrary,
     LaunchedEffect(songLevel, clickLevel) { player.setLevels(songLevel, clickLevel) }
     LaunchedEffect(song.offsetMs) { player.setOffsetMs(song.offsetMs) }
     var showMix by remember { mutableStateOf(false) }
+    val rowsView by prefs.partRows.collectAsStateWithLifecycle()
+    val loop by player.loop.collectAsStateWithLifecycle()
+    var renaming by remember { mutableStateOf<PartRow?>(null) }
 
     // The metronome and the song shouldn't click over each other.
     LaunchedEffect(playing) { if (playing) metronome.stop() }
@@ -87,6 +90,9 @@ fun SongScreen(song: Song, metronome: MetronomeController, library: SongLibrary,
     val bars = map.bars
     val metersVary = remember(map) { bars.map { it.meter }.distinct().size > 1 }
     val currentBar = bars.indexOfLast { it.start <= pos + 0.02 }
+    val rows = remember(map, song.rowNames) { PartRows.build(map, song.rowNames) }
+    val usualMeter = remember(map) { PartRows.usualMeter(map) }
+    val currentRow = rows.indexOfLast { it.first <= currentBar.coerceAtLeast(0) }
 
     fun jump(sec: Double) { player.seekTo(sec.coerceAtLeast(0.0)); tick() }
 
@@ -126,7 +132,8 @@ fun SongScreen(song: Song, metronome: MetronomeController, library: SongLibrary,
             Text(
                 when {
                     sec == null || sec.kind == Section.Kind.FREE -> "free time"
-                    else -> "Part ${currentPart + 1} · ${bars.getOrNull(currentBar)?.meter ?: sec.meter}${if (sec.kind == Section.Kind.RAMP) " · changing tempo" else ""}"
+                    else -> "${if (rowsView) rows.getOrNull(currentRow)?.let { it.name ?: it.range } ?: "Part ${currentPart + 1}" else "Part ${currentPart + 1}"} · " +
+                        "${bars.getOrNull(currentBar)?.meter ?: sec.meter}${if (sec.kind == Section.Kind.RAMP) " · changing tempo" else ""}"
                 },
                 style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -162,9 +169,39 @@ fun SongScreen(song: Song, metronome: MetronomeController, library: SongLibrary,
             }
         }
 
-        // Parts
-        Text("Parts", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(top = 14.dp, bottom = 6.dp))
+        // Bars: part rows (default) or the bar grid; the switch is remembered
+        Row(Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(if (rowsView) "Parts · tap a bar to jump, hold to loop" else "Parts · tap to jump",
+                style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary, modifier = Modifier.weight(1f))
+            ViewSwitch(rowsView) { prefs.setPartRows(it) }
+        }
+        loop?.let { (a, _) ->
+            val r = rows.firstOrNull { bars.getOrNull(it.first)?.start == a }
+            Row(
+                Modifier.fillMaxWidth().padding(bottom = 4.dp).clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant).padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Looping ${r?.let { it.name ?: it.range } ?: "a part"}", style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
+                Text("Stop loop", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.clickable { player.clearLoop(); tick() }.padding(start = 8.dp))
+            }
+        }
+        if (rowsView) PartRowsList(
+            rows = rows, bars = bars, currentBar = currentBar, playing = playing,
+            usualMeter = usualMeter, loopStart = loop?.first,
+            modifier = Modifier.weight(1f),
+            onJump = { jump(bars[it].start) },
+            onLoop = { r ->
+                val a = bars[r.first].start
+                val b = bars.getOrNull(r.end)?.start ?: map.duration
+                if (loop?.first == a) player.clearLoop() else player.setLoop(a, b)
+                tick()
+            },
+            onRename = { renaming = it },
+        )
+        if (!rowsView) Column(Modifier.weight(1f)) {
+        // Parts (the "Parts" label is in the header row above)
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             parts.forEachIndexed { i, p ->
                 val on = i == selectedPart
@@ -216,21 +253,31 @@ fun SongScreen(song: Song, metronome: MetronomeController, library: SongLibrary,
                 }
             }
         }
-
+        }
         // Transport (thumb zone)
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            SquareButton(onClick = { parts.getOrNull(currentPart - 1)?.let { jump(it.start) } ?: jump(0.0) }, size = 56) {
+            SquareButton(onClick = {
+                if (rowsView) {
+                    // like a CD player: back to the start of this row, or the previous one if you're at its start
+                    val r = rows.getOrNull(currentRow)
+                    val target = if (r != null && pos - bars[r.first].start > 1.0) r else rows.getOrNull(currentRow - 1)
+                    target?.let { jump(bars[it.first].start) } ?: jump(0.0)
+                } else parts.getOrNull(currentPart - 1)?.let { jump(it.start) } ?: jump(0.0)
+            }, size = 56) {
                 Text("⏮", fontSize = 20.sp)
             }
             SquareButton(onClick = player::toggle, size = 68, dark = true) {
                 Icon(if (playing) AppIcons.Pause else AppIcons.Play, contentDescription = if (playing) "Pause" else "Play",
                     modifier = Modifier.size(34.dp))
             }
-            SquareButton(onClick = { parts.getOrNull(currentPart + 1)?.let { jump(it.start) } }, size = 56) {
+            SquareButton(onClick = {
+                if (rowsView) rows.getOrNull(currentRow + 1)?.let { jump(bars[it.first].start) }
+                else parts.getOrNull(currentPart + 1)?.let { jump(it.start) }
+            }, size = 56) {
                 Text("⏭", fontSize = 20.sp)
             }
         }
@@ -240,6 +287,9 @@ fun SongScreen(song: Song, metronome: MetronomeController, library: SongLibrary,
             modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
             textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         )
+        renaming?.let { r ->
+            RenameDialog(r, onDismiss = { renaming = null }) { name -> library.renameRow(song.id, r.first, name); renaming = null }
+        }
         if (showMix) MixSheet(
             songLevel, clickLevel, prefs::setSongLevel, prefs::setSongClickLevel,
             offsetMs = song.offsetMs, onOffset = { library.setOffset(song.id, it) },

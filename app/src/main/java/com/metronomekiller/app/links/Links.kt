@@ -79,15 +79,31 @@ object Links {
      * Uses 1 MB range requests: YouTube slows down single huge downloads, but
      * serves chunked ones (like a video player makes) at full speed.
      */
+    /**
+     * LEARN — picking the download: YouTube offers the same audio in several
+     * codecs and qualities. Opus at ~70 kbps sounds about as good as AAC at 128
+     * kbps, so it's about half the storage (≈2 MB per 4 minutes). The beat model
+     * only listens to 22 kHz mono anyway. So: prefer Opus, and the stream closest
+     * to 70 kbps (below 48 kbps starts to sound thin). AAC/m4a is the fallback.
+     */
+    private fun sizeScore(bitrate: Int): Int {
+        val kbps = if (bitrate > 1000) bitrate / 1000 else bitrate // NewPipe reports kbps, guard against bps
+        return when {
+            kbps <= 0 -> 1000          // unknown: last resort
+            kbps < 48 -> 500 + (48 - kbps)
+            else -> kotlin.math.abs(kbps - 70)
+        }
+    }
+
     fun downloadAudio(url: String, dir: File, baseName: String, onProgress: (Float) -> Unit): File {
         init()
         val service = NewPipe.getServiceByUrl(url)
         val info = StreamInfo.getInfo(service, url)
         val stream = info.audioStreams
             .filter { it.deliveryMethod == DeliveryMethod.PROGRESSIVE_HTTP && it.isUrl }
-            // prefer m4a/AAC (decodes everywhere), then the highest bitrate
-            .sortedWith(compareBy({ it.format?.suffix != "m4a" }, { -it.averageBitrate }))
+            .sortedWith(compareBy({ it.format != org.schabi.newpipe.extractor.MediaFormat.WEBMA_OPUS }, { sizeScore(it.averageBitrate) }))
             .firstOrNull() ?: throw IOException("No downloadable audio for this video.")
+        // Opus streams come in a WebM container; ".webm" is what Android's extractor expects.
         val ext = stream.format?.suffix ?: "audio"
         dir.mkdirs()
         val out = File(dir, "$baseName.$ext")

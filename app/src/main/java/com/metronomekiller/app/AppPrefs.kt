@@ -62,6 +62,11 @@ class AppPrefs(context: Context) {
     val accurateModel: StateFlow<Boolean> = _accurateModel
     fun setAccurateModel(on: Boolean) { _accurateModel.value = on; prefs.edit { putBoolean("accurate_model", on) } }
 
+    /** Song screen bars layout: true = part rows (one row per part), false = the bar grid. */
+    private val _partRows = MutableStateFlow(prefs.getBoolean("part_rows", true))
+    val partRows: StateFlow<Boolean> = _partRows
+    fun setPartRows(on: Boolean) { _partRows.value = on; prefs.edit { putBoolean("part_rows", on) } }
+
     private val _vibrate = MutableStateFlow(prefs.getBoolean("vibrate", false))
     val vibrate: StateFlow<Boolean> = _vibrate
     fun setVibrate(on: Boolean) { _vibrate.value = on; prefs.edit { putBoolean("vibrate", on) } }

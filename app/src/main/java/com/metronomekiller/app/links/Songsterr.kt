@@ -39,10 +39,25 @@ object Songsterr {
         val videos: Map<String, DoubleArray>,
     )
 
-    data class TabBar(val num: Int, val den: Int, val qpm: Double) {
+    /** One bar of the tab; [marker] is the part name written at this bar ("Chorus"), if any. */
+    data class TabBar(val num: Int, val den: Int, val qpm: Double, val marker: String? = null) {
         val quarters get() = num * 4.0 / den
         val seconds get() = quarters * 60.0 / qpm
     }
+
+    /**
+     * Song id from a Songsterr link, e.g.
+     * https://www.songsterr.com/a/wsa/nirvana-smells-like-teen-spirit-tab-s269 → 269
+     * (a "t3" after the number picks an instrument track; we ignore it). Null if not Songsterr.
+     */
+    fun songIdFromLink(text: String): Long? {
+        if (!text.contains("songsterr.com", ignoreCase = true)) return null
+        return Regex("""-s(\d+)(?:t\d+)?(?:[/?#]|$)""").find(text.trim())?.groupValues?.get(1)?.toLongOrNull()
+    }
+
+    /** "[A] Intro I (Guitar Riff)" → "Intro I (Guitar Riff)", "Verse 1:" → "Verse 1". */
+    fun cleanMarker(text: String): String? =
+        text.replace(Regex("""^\s*\[[^\]]*]\s*"""), "").trim().trimEnd(':').trim().take(40).ifEmpty { null }
 
     /** Messy video titles like "Periphery - Racecar (HQ Audio) [Official]" → "Periphery Racecar". */
     fun cleanQuery(title: String, artist: String): String {
@@ -73,19 +88,35 @@ object Songsterr {
             if (score > bestScore) { bestScore = score; best = r }
         }
         if (best == null || bestScore < 0.5) return null
-        return fetch(best.getLong("songId"), best.getString("title"), best.getString("artist"))
+        return fetch(best.getLong("songId"))
     }
 
     private fun tokens(s: String) = s.lowercase().split(Regex("""[^\p{L}\p{N}]+""")).filter { it.length > 1 }.toSet()
 
-    fun fetch(songId: Long, title: String, artist: String): Tab? {
+    /** Downloads one tab by its Songsterr song id (from a search or a pasted link). */
+    fun fetch(songId: Long): Tab? {
         val meta = JSONObject(getText("https://www.songsterr.com/api/meta/$songId"))
+        val title = meta.optString("title")
+        val artist = meta.opt("artist").let { if (it is JSONObject) it.optString("name") else it?.toString() ?: "" }
         val rev = meta.getLong("revisionId")
         val image = meta.getString("image")
         val part = meta.optInt("popularTrack", meta.optInt("defaultTrack", 0)).coerceAtLeast(0)
-        val tab = JSONObject(getText("https://dqsljvtekg760.cloudfront.net/$songId/$rev/$image/$part.json"))
+        fun track(n: Int) = JSONObject(getText("https://dqsljvtekg760.cloudfront.net/$songId/$rev/$image/$n.json"))
+        val tab = track(part)
         val measures = tab.getJSONArray("measures")
         val order = unroll(measures)
+
+        // Part names ("Intro", "Verse 1") are written on one track, usually the
+        // popular one; if it has none, the default track or the first may.
+        fun markersOf(ms: JSONArray) = (0 until ms.length()).associateWith { i ->
+            ms.getJSONObject(i).optJSONObject("marker")?.optString("text")?.let(::cleanMarker)
+        }.filterValues { it != null }
+        var markers = markersOf(measures)
+        if (markers.isEmpty()) for (n in listOf(meta.optInt("defaultTrack", 0), 0).distinct().filter { it != part && it >= 0 }) {
+            val other = runCatching { track(n).getJSONArray("measures") }.getOrNull() ?: continue
+            if (other.length() == measures.length()) markers = markersOf(other)
+            if (markers.isNotEmpty()) break
+        }
 
         val tempoList = tab.optJSONObject("automations")?.optJSONArray("tempo")
         val tempos = HashMap<Int, Double>()
@@ -100,9 +131,9 @@ object Songsterr {
             sigs += sig
         }
         var qpm = 120.0
-        val bars = order.map { mi -> qpm = tempos[mi] ?: qpm; TabBar(sigs[mi].first, sigs[mi].second, qpm) }
+        val bars = order.map { mi -> qpm = tempos[mi] ?: qpm; TabBar(sigs[mi].first, sigs[mi].second, qpm, markers[mi]) }
 
-        val videos = HashMap<String, DoubleArray>()
+        val videos = LinkedHashMap<String, DoubleArray>() // keeps Songsterr's order: its main video first
         runCatching {
             val arr = JSONArray(getText("https://www.songsterr.com/api/video-points/$songId/$rev/list"))
             for (i in 0 until arr.length()) {
@@ -209,7 +240,7 @@ object Songsterr {
             val s = starts[i]
             val e = if (i + 1 < starts.size) starts[i + 1] else end
             if (e <= s) continue
-            outBars += Bar(s, bars[i].num, bars[i].den)
+            outBars += Bar(s, bars[i].num, bars[i].den, bars[i].marker)
             for (k in 0 until bars[i].num) beats += s + (e - s) * k / bars[i].num
         }
         // Parts: about 16 bars each, breaking where the tab's tempo changes, so a

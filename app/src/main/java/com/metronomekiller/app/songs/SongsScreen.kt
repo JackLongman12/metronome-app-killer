@@ -68,11 +68,12 @@ fun SongsScreen(library: SongLibrary, onOpen: (String) -> Unit) {
         val linkStatus by library.linkStatus.collectAsStateWithLifecycle()
         var link by remember { mutableStateOf("") }
         val clipboard = LocalClipboardManager.current
+        var tabFor by remember { mutableStateOf<Song?>(null) }
         Row(verticalAlignment = Alignment.CenterVertically) {
             OutlinedTextField(
                 value = link,
                 onValueChange = { link = it; library.clearLinkStatus() },
-                placeholder = { Text("Paste a YouTube or SoundCloud link") },
+                placeholder = { Text("Paste a YouTube, SoundCloud or Songsterr link") },
                 singleLine = true,
                 modifier = Modifier.weight(1f),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go),
@@ -101,12 +102,15 @@ fun SongsScreen(library: SongLibrary, onOpen: (String) -> Unit) {
             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
         ) { Text("+ Add a song from your phone") }
         Text(
-            "Playlist links add every song. You can also share a video from the YouTube app to here.",
+            "Playlist links add every song. A Songsterr link adds the song with that exact tab. You can also share a video from the YouTube app to here.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 6.dp, bottom = 8.dp),
         )
 
+        tabFor?.let { s ->
+            TabLinkDialog(s, clipboard.getText()?.text, onDismiss = { tabFor = null }) { library.attachTab(s.id, it); tabFor = null }
+        }
         if (songs.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
@@ -119,7 +123,7 @@ fun SongsScreen(library: SongLibrary, onOpen: (String) -> Unit) {
             LazyColumn {
                 items(songs, key = { it.id }) { song ->
                     SongRow(song, onOpen = { if (song.map != null) onOpen(song.id) }, onDelete = { library.remove(song.id) },
-                        onRetry = { library.retry(song.id) })
+                        onRetry = { library.retry(song.id) }, onPickTab = { tabFor = song })
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 }
             }
@@ -128,7 +132,7 @@ fun SongsScreen(library: SongLibrary, onOpen: (String) -> Unit) {
 }
 
 @Composable
-private fun SongRow(song: Song, onOpen: () -> Unit, onDelete: () -> Unit, onRetry: () -> Unit) {
+private fun SongRow(song: Song, onOpen: () -> Unit, onDelete: () -> Unit, onRetry: () -> Unit, onPickTab: () -> Unit) {
     var menu by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().clickable(onClick = onOpen).padding(vertical = 12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -153,6 +157,7 @@ private fun SongRow(song: Song, onOpen: () -> Unit, onDelete: () -> Unit, onRetr
                         text = { Text(if (song.status is SongStatus.Failed) "Try again" else "Analyse again") },
                         onClick = { menu = false; onRetry() },
                     )
+                    if (song.map != null) DropdownMenuItem(text = { Text("Use a Songsterr tab") }, onClick = { menu = false; onPickTab() })
                     DropdownMenuItem(text = { Text("Remove") }, onClick = { menu = false; onDelete() })
                 }
             }
@@ -168,4 +173,31 @@ private fun SongRow(song: Song, onOpen: () -> Unit, onDelete: () -> Unit, onRetr
             SongStatus.Ready -> Unit
         }
     }
+}
+
+/**
+ * Paste the link of the Songsterr tab you trust for this song (open the tab on
+ * songsterr.com, Share → Copy link). If your clipboard already has one, it's filled in.
+ */
+@Composable
+private fun TabLinkDialog(song: Song, clip: String?, onDismiss: () -> Unit, onUse: (String) -> Unit) {
+    var text by remember { mutableStateOf(clip?.takeIf { com.metronomekiller.app.links.Songsterr.songIdFromLink(it) != null } ?: "") }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Songsterr tab for ${song.title}") },
+        text = {
+            Column {
+                OutlinedTextField(text, { text = it }, singleLine = true,
+                    placeholder = { Text("songsterr.com/a/wsa/…-tab-s269") })
+                Text(
+                    "The tab has to line up with this recording; if it doesn't, nothing changes. " +
+                        "Its part names (Intro, Verse...) show up in the part rows.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = { onUse(text) }, enabled = text.isNotBlank()) { Text("Use tab") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }

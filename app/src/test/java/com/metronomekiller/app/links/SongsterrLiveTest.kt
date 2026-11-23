@@ -32,6 +32,27 @@ class SongsterrLiveTest {
     }
 
     @Test
+    fun teenSpiritHasPartNames() {
+        assumeTrue(System.getenv("NETWORK_TESTS") == "1")
+        val id = Songsterr.songIdFromLink("https://www.songsterr.com/a/wsa/nirvana-smells-like-teen-spirit-tab-s269")!!
+        val tab = Songsterr.fetch(id)!!
+        val names = tab.bars.mapNotNull { it.marker }
+        println("${tab.artist} - ${tab.title}: ${names.take(8)} videos ${tab.videos.size}")
+        assert(names.isNotEmpty()) { "tab part names" }
+        assert(names.any { it.contains("Chorus", true) })
+    }
+
+    @Test
+    fun readsSongsterrLinks() {
+        assertEquals(269L, Songsterr.songIdFromLink("https://www.songsterr.com/a/wsa/nirvana-smells-like-teen-spirit-tab-s269"))
+        assertEquals(78144L, Songsterr.songIdFromLink("check this https://www.songsterr.com/a/wsa/periphery-racecar-tab-s78144t3?x=1"))
+        assertEquals(null, Songsterr.songIdFromLink("https://youtu.be/gGyPwkfmk4g"))
+        assertEquals("Intro I (Guitar Riff)", Songsterr.cleanMarker("[A] Intro I (Guitar Riff)"))
+        assertEquals("Verse 1", Songsterr.cleanMarker("Verse 1:"))
+        assertEquals(null, Songsterr.cleanMarker("  "))
+    }
+
+    @Test
     fun cleansTitles() {
         assertEquals("Periphery Racecar", Songsterr.cleanQuery("Periphery - Racecar (HQ Audio)", "ILikeEatingGuitars").replace(" - ", " "))
     }

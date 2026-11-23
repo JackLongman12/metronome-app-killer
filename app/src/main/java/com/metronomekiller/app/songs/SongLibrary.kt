@@ -57,6 +57,10 @@ data class Song(
     val tabInfo: String? = null,
     /** Whether the tab's tempo map is in use (else the AI's). */
     val usingTab: Boolean = false,
+    /** Songsterr song id you picked yourself (pasted link): used instead of searching. */
+    val tabId: Long? = null,
+    /** Your own names for rows in the part-rows view, keyed by the row's first bar (0-based). */
+    val rowNames: Map<Int, String> = emptyMap(),
 )
 
 /**
@@ -111,6 +115,7 @@ class SongLibrary(private val context: Context) {
      */
     fun addLink(text: String) {
         val url = Links.findUrl(text) ?: text.trim()
+        Songsterr.songIdFromLink(url)?.let { addSongsterr(it); return }
         _linkStatus.value = "Looking up the link…"
         scope.launch {
             try {
@@ -134,6 +139,75 @@ class SongLibrary(private val context: Context) {
                 _linkStatus.value = "Couldn't open that link: ${e.message ?: e.javaClass.simpleName}"
             }
         }
+    }
+
+    /**
+     * A Songsterr link on its own: tabs with a player are synced to a YouTube
+     * video, so we add that video as the song, and its tab lines up exactly.
+     */
+    private fun addSongsterr(songId: Long) {
+        _linkStatus.value = "Looking up the Songsterr tab…"
+        scope.launch {
+            try {
+                val tab = Songsterr.fetch(songId) ?: throw IllegalStateException("tab not found")
+                val video = tab.videos.keys.firstOrNull()
+                if (video == null) {
+                    _linkStatus.value = "Couldn't use that tab on its own: it isn't synced to a video. " +
+                        "Add the song from your phone or a YouTube link, then use ••• → Use a Songsterr tab."
+                    return@launch
+                }
+                val s = Song(UUID.randomUUID().toString(), tab.title, tab.artist, "", System.currentTimeMillis(),
+                    link = "https://www.youtube.com/watch?v=$video", tabId = songId)
+                _songs.update { listOf(s) + it }
+                save(); analyse(s.id)
+                _linkStatus.value = null
+            } catch (e: Throwable) {
+                _linkStatus.value = "Couldn't open that link: ${e.message ?: e.javaClass.simpleName}"
+            }
+        }
+    }
+
+    /**
+     * Use a specific Songsterr tab for a song you already have (your pick beats
+     * the automatic search, e.g. when a better tab exists). The tab still has to
+     * line up with the recording, or we keep what you had.
+     */
+    fun attachTab(id: String, link: String) {
+        val songId = Songsterr.songIdFromLink(link)
+        if (songId == null) { _linkStatus.value = "Couldn't read that link. Copy it from the tab's page on songsterr.com."; return }
+        _linkStatus.value = "Fetching the tab…"
+        scope.launch {
+            queue.withLock {
+                try {
+                    val song = song(id) ?: return@withLock
+                    val ai = TempoMap.fromJson(JSONObject(File(dir, "$id.ai.json").readText()))
+                    val tab = Songsterr.fetch(songId) ?: throw IllegalStateException("tab not found")
+                    val points = song.link?.let { Links.youtubeId(it) }?.let { tab.videos[it] }
+                    val tabMap = if (points != null) Songsterr.mapFromSync(tab, points, ai.duration)
+                    else Songsterr.mapAligned(tab, ai.beats, ai.duration)
+                    if (tabMap == null) {
+                        _linkStatus.value = "That tab doesn't line up with this recording (maybe a different version), so nothing changed."
+                        return@withLock
+                    }
+                    File(dir, "$id.tab.json").writeText(tabMap.toJson().toString())
+                    File(dir, "$id.json").writeText(tabMap.toJson().toString())
+                    val info = "${tab.artist} – ${tab.title} · ${if (points != null) "synced to this video" else "lined up with the audio"}"
+                    _songs.update { list -> list.map { if (it.id == id) it.copy(map = tabMap, tabInfo = info, usingTab = true, tabId = songId, rowNames = emptyMap()) else it } }
+                    save()
+                    _linkStatus.value = "Using the tab: $info"
+                } catch (e: Throwable) {
+                    _linkStatus.value = "Couldn't use that tab: ${e.message ?: e.javaClass.simpleName}"
+                }
+            }
+        }
+    }
+
+    /** Name a row of the part-rows view (blank = back to the default). */
+    fun renameRow(id: String, firstBar: Int, name: String) {
+        _songs.update { list -> list.map {
+            if (it.id != id) it else it.copy(rowNames = if (name.isBlank()) it.rowNames - firstBar else it.rowNames + (firstBar to name.trim().take(30)))
+        } }
+        save()
     }
 
     fun setOffset(id: String, ms: Int) {
@@ -218,9 +292,9 @@ class SongLibrary(private val context: Context) {
                     // Songsterr: a human-written tempo map, if this song has a synced tab.
                     var map = aiMap
                     var tabInfo: String? = null
-                    if (App.from(context).prefs.songsterr.value) {
+                    if (song.tabId != null || App.from(context).prefs.songsterr.value) {
                         setStatus(id, SongStatus.Working("Looking for a Songsterr tab", 0.5f))
-                        runCatching { Songsterr.find(song.title, song.artist) }.getOrNull()?.let { tab ->
+                        runCatching { song.tabId?.let { Songsterr.fetch(it) } ?: Songsterr.find(song.title, song.artist) }.getOrNull()?.let { tab ->
                             val video = song.link?.let { Links.youtubeId(it) }
                             val points = video?.let { tab.videos[it] }
                             val tabMap = if (points != null) Songsterr.mapFromSync(tab, points, audio.durationSec)
@@ -233,7 +307,7 @@ class SongLibrary(private val context: Context) {
                         }
                     }
                     File(dir, "$id.json").writeText(map.toJson().toString())
-                    _songs.update { list -> list.map { if (it.id == id) it.copy(tabInfo = tabInfo, usingTab = tabInfo != null) else it } }
+                    _songs.update { list -> list.map { if (it.id == id) it.copy(tabInfo = tabInfo, usingTab = tabInfo != null, rowNames = emptyMap()) else it } }
                     setStatus(id, SongStatus.Ready, map)
                     save()
                 } catch (e: Throwable) {
@@ -273,7 +347,9 @@ class SongLibrary(private val context: Context) {
                 map, if (map != null) SongStatus.Ready else SongStatus.Queued,
                 link = o.optString("link").ifEmpty { null }, playlist = o.optString("playlist").ifEmpty { null },
                 skips = skips ?: emptyList(), offsetMs = o.optInt("offsetMs", 0),
-                tabInfo = o.optString("tabInfo").ifEmpty { null }, usingTab = o.optBoolean("usingTab"))
+                tabInfo = o.optString("tabInfo").ifEmpty { null }, usingTab = o.optBoolean("usingTab"),
+                tabId = o.optLong("tabId", 0L).takeIf { it > 0 },
+                rowNames = o.optJSONObject("rowNames")?.let { r -> r.keys().asSequence().associate { k -> k.toInt() to r.getString(k) } } ?: emptyMap())
         }
     }.getOrDefault(emptyList())
 
@@ -283,6 +359,8 @@ class SongLibrary(private val context: Context) {
                 .put("uri", it.uri).put("addedAt", it.addedAt)
                 .put("offsetMs", it.offsetMs)
                 .put("tabInfo", it.tabInfo ?: "").put("usingTab", it.usingTab)
+                .put("tabId", it.tabId ?: 0L)
+                .put("rowNames", JSONObject().apply { it.rowNames.forEach { (k, v) -> put(k.toString(), v) } })
                 .put("link", it.link ?: "").put("playlist", it.playlist ?: "")
                 .put("skips", JSONArray(it.skips.map { (a, b) -> JSONArray(listOf(a, b)) }))
         })
