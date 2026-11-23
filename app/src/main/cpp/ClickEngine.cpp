@@ -233,7 +233,7 @@ void ClickEngine::onErrorAfterClose(oboe::AudioStream*, oboe::Result error) {
 oboe::DataCallbackResult ClickEngine::onAudioReady(oboe::AudioStream* stream, void* audioData, int32_t numFrames) {
     auto* out = static_cast<float*>(audioData);
     const int sr = stream->getSampleRate();
-    const int sub = subdivision_.load();
+    int sub = subdivision_.load();
     const double bpm = bpm_.load();
     double interval = sr * 60.0 / (bpm * sub);
     int sound = sound_.load();
@@ -267,9 +267,19 @@ oboe::DataCallbackResult ClickEngine::onAudioReady(oboe::AudioStream* stream, vo
             if (beatIdx_ == 0 && subPos_ == 0) {
                 // A new bar. Speed trainer: take the queued tempo now, on the "1".
                 const double next = pendingBpm_.exchange(-1.0);
-                if (next > 0.0) {
-                    bpm_.store(next);
-                    interval = sr * 60.0 / (next * sub);
+                if (next > 0.0) bpm_.store(next);
+                // Subdivision ladder: take the queued subdivision on the "1" too.
+                const int nextSub = pendingSub_.exchange(-1);
+                if (nextSub >= 1 && nextSub <= 4) { subdivision_.store(nextSub); sub = nextSub; }
+                interval = sr * 60.0 / (bpm_.load() * sub);
+                // Polyrhythm: spread N hits evenly over this bar, starting together on the "1".
+                polyN_ = polyCount_.load();
+                if (polyN_ > 0) {
+                    const double lastFrac = lastBeatFraction_.load();
+                    const double barFrames = interval * sub * (count - 1 + (lastFrac < 0.999 ? lastFrac : 1.0));
+                    polyInterval_ = barFrames / polyN_;
+                    polyIdx_ = 0;
+                    polyToNext_ = 0.0;
                 }
                 // Gap click: which bar of the round is this, and is it a silent one?
                 const int on = gapOn_.load(), off = gapOff_.load();
@@ -295,7 +305,9 @@ oboe::DataCallbackResult ClickEngine::onAudioReady(oboe::AudioStream* stream, vo
             if (beatMuted_) state = kMute; // shows as a muted beat on screen
 
             const bool accented = state == kAccent || state == kStrong;
-            if (state == kMute || silent) voice_ = nullptr;
+            // Polyrhythm "only the 1": the normal click keeps just the downbeat.
+            const bool polyHush = polyN_ > 0 && polyMainOne_.load() && !(beatIdx_ == 0 && subPos_ == 0);
+            if (state == kMute || silent || polyHush) voice_ = nullptr;
             else if (subPos_ != 0) voice_ = &voices_[sound][2];
             else voice_ = &voices_[sound][accented ? 0 : 1];
             // Strong = the accent sound pushed harder into the soft limiter.
@@ -328,15 +340,25 @@ oboe::DataCallbackResult ClickEngine::onAudioReady(oboe::AudioStream* stream, vo
                 framesToNext_ += interval;
             }
         }
+        // Polyrhythm hits (after the main click, so both can start on the same frame)
+        if (clicks && polyN_ > 0 && polyIdx_ < polyN_ && polyToNext_ <= 0.0) {
+            int ps = polySound_.load();
+            if (ps < 0 || ps >= static_cast<int>(voices_.size())) ps = 0;
+            voice2_ = &voices_[ps][polyIdx_ == 0 ? 0 : 1];
+            voice2Pos_ = 0;
+            ++polyIdx_;
+            polyToNext_ += polyInterval_;
+        }
         float v = 0.0f;
         if (voice_ && voicePos_ < voice_->size()) v = (*voice_)[voicePos_++] * vol * voiceGain_;
+        if (voice2_ && voice2Pos_ < voice2_->size()) v += (*voice2_)[voice2Pos_++] * vol * 0.85f;
         // Soft limiter: lifts quieter parts (sounds louder overall) and lets the
         // volume go above 100% without harsh digital clipping.
         out[i] = static_cast<float>(std::tanh(1.4 * v) / std::tanh(1.4));
         // While silent (preview-only stream) hold the countdown at 0 so the first
         // real click lands immediately when clicks are switched on, instead of
         // a backlog of "missed" clicks firing at once.
-        if (clicks) framesToNext_ -= 1.0;
+        if (clicks) { framesToNext_ -= 1.0; polyToNext_ -= 1.0; }
     }
     frame_ += numFrames;
     return oboe::DataCallbackResult::Continue;

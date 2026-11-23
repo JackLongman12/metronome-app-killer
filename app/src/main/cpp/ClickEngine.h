@@ -72,6 +72,14 @@ public:
     void setRandomMute(int percent) { muteChance_.store(percent); }
     /** Switch to [bpm] exactly when the next bar starts (speed trainer). */
     void setTempoAtNextBar(double bpm) { pendingBpm_.store(bpm); }
+    /** Switch subdivision (1–4 clicks per beat) exactly when the next bar starts (subdivision ladder). */
+    void setSubdivisionAtNextBar(int perBeat) { pendingSub_.store(perBeat); }
+    /**
+     * Polyrhythm: a second click playing [count] evenly spaced hits per bar in
+     * [sound], against the normal beats (e.g. 3 against 4). 0 = off.
+     * [mainOnlyOne] = the normal click plays only the "1", so the cross-rhythm stands out.
+     */
+    void setPoly(int count, int sound, bool mainOnlyOne) { polySound_.store(sound); polyMainOne_.store(mainOnlyOne); polyCount_.store(count); }
 
     /**
      * Latest beat whose sound has reached the output by [nowNs] (CLOCK_MONOTONIC),
@@ -119,6 +127,10 @@ private:
     std::atomic<int> leadBars_{0};
     std::atomic<int> muteChance_{0};
     std::atomic<double> pendingBpm_{-1.0};
+    std::atomic<int> pendingSub_{-1};
+    std::atomic<int> polyCount_{0};
+    std::atomic<int> polySound_{1};
+    std::atomic<bool> polyMainOne_{false};
 
     std::atomic<bool> clicksEnabled_{true};
     std::atomic<int> previewSound_{-1};
@@ -138,6 +150,13 @@ private:
     bool barSilent_ = false;
     bool beatMuted_ = false;
     uint32_t rng_ = 0x9E3779B9u;
+    // Polyrhythm voice (its own countdown, restarted on every bar's "1")
+    int polyIdx_ = 0;
+    int polyN_ = 0;
+    double polyToNext_ = 0.0;
+    double polyInterval_ = 0.0;
+    const std::vector<float>* voice2_ = nullptr;
+    size_t voice2Pos_ = 0;
     const std::vector<float>* voice_ = nullptr;
     size_t voicePos_ = 0;
     float voiceGain_ = 1.0f;

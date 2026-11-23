@@ -25,7 +25,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -63,10 +67,16 @@ fun PracticeScreen(practice: PracticeController, metronome: MetronomeController,
 
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
         Spacer(Modifier.height(12.dp))
-        Text("Practice", style = MaterialTheme.typography.headlineSmall)
+        var showHistory by remember { mutableStateOf(false) }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Practice", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
+            TodayChip(practice) { showHistory = true }
+        }
+        if (showHistory) HistorySheet(practice) { showHistory = false }
         Spacer(Modifier.height(10.dp))
         Segmented(
-            listOf("Speed" to PracticeController.Tool.SPEED, "Gaps" to PracticeController.Tool.GAPS, "Timing" to PracticeController.Tool.TIMING),
+            listOf("Speed" to PracticeController.Tool.SPEED, "Gaps" to PracticeController.Tool.GAPS, "Timing" to PracticeController.Tool.TIMING,
+                "Ladder" to PracticeController.Tool.LADDER, "Poly" to PracticeController.Tool.POLY),
             tool,
         ) { practice.setTool(it); tick() }
         Spacer(Modifier.height(12.dp))
@@ -82,6 +92,8 @@ fun PracticeScreen(practice: PracticeController, metronome: MetronomeController,
             PracticeController.Tool.SPEED -> SpeedTrainer(practice, state.bpm, running == tool, tick)
             PracticeController.Tool.GAPS -> GapClick(practice, running == tool, tick)
             PracticeController.Tool.TIMING -> TimingCheck(practice, running == tool)
+            PracticeController.Tool.LADDER -> SubdivisionLadder(practice, running == tool, tick)
+            PracticeController.Tool.POLY -> Polyrhythm(practice, metronome, running == tool, tick)
         }
 
         Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -135,7 +147,9 @@ private fun ColumnScope.SpeedTrainer(practice: PracticeController, bpm: Int, on:
             { practice.setTrainer(plan.copy(every = (plan.every - 1).coerceAtLeast(1))) }) {
             practice.setTrainer(plan.copy(every = (plan.every + 1).coerceAtMost(64)))
         }
-        Toggle("At the top", if (plan.restart) "Start over" else "Hold", tick) { practice.setTrainer(plan.copy(restart = !plan.restart)) }
+        Toggle("At the top", plan.top.label, tick) {
+            practice.setTrainer(plan.copy(top = TrainerPlan.Top.entries[(plan.top.ordinal + 1) % TrainerPlan.Top.entries.size]))
+        }
         CountIn(practice, tick)
     }
 }
@@ -145,9 +159,7 @@ private fun ColumnScope.SpeedTrainer(practice: PracticeController, bpm: Int, on:
 private fun StepGraph(plan: TrainerPlan, bar: Int, modifier: Modifier) {
     val accent = MaterialTheme.colorScheme.primary
     val track = MaterialTheme.colorScheme.surfaceVariant
-    val s = plan.step.coerceAtLeast(1)
-    val steps = ((abs(plan.to - plan.from) + s - 1) / s + 1).coerceIn(1, 40)
-    val totalBars = steps * plan.every
+    val totalBars = plan.totalBars.coerceIn(1, 400)
     Canvas(modifier) {
         val lo = minOf(plan.from, plan.to).toFloat(); val hi = maxOf(plan.from, plan.to).toFloat().coerceAtLeast(lo + 1)
         fun x(b: Int) = size.width * b / totalBars
@@ -306,6 +318,202 @@ private fun StatCard(label: String, value: String, note: String, modifier: Modif
         Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(value, fontSize = 20.sp, fontWeight = FontWeight.Bold)
         Text(note, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+// ── Subdivision ladder ─────────────────────────────────────────────────────
+
+@Composable
+private fun ColumnScope.SubdivisionLadder(practice: PracticeController, on: Boolean, tick: () -> Unit) {
+    val plan by practice.ladder.collectAsStateWithLifecycle()
+    val now by practice.ladderSub.collectAsStateWithLifecycle()
+    val bar by practice.bar.collectAsStateWithLifecycle()
+    val c = MaterialTheme.colorScheme
+    Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+        Text(if (on) LadderPlan.name(now) else "Same tempo, more notes",
+            fontSize = 30.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
+        // The cycle, with the current rung highlighted
+        val cycle = plan.cycle
+        val at = if (on && bar >= 0) (bar / plan.every.coerceAtLeast(1)) % cycle.size else -1
+        Row(Modifier.fillMaxWidth().padding(bottom = 10.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            cycle.forEachIndexed { i, n ->
+                Box(
+                    Modifier.weight(1f).height((14 + n * 10).dp).align(Alignment.Bottom).clip(RoundedCornerShape(5.dp))
+                        .background(if (i == at) c.primary else c.surfaceVariant),
+                    contentAlignment = Alignment.Center,
+                ) { Text("$n", style = MaterialTheme.typography.labelSmall, color = if (i == at) c.onPrimary else c.onSurfaceVariant) }
+            }
+        }
+        Text("Rungs", style = MaterialTheme.typography.labelLarge, color = c.primary, modifier = Modifier.padding(bottom = 4.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf(1, 2, 3, 4).forEach { n ->
+                val inIt = n in plan.rungs
+                Text(
+                    LadderPlan.name(n), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelMedium,
+                    color = if (inIt) c.onPrimary else c.onSurface,
+                    modifier = Modifier.weight(1f).clip(RoundedCornerShape(8.dp))
+                        .background(if (inIt) c.primary else c.surfaceVariant)
+                        .clickable {
+                            val next = if (inIt) plan.rungs - n else (plan.rungs + n).sorted()
+                            if (next.isNotEmpty()) practice.setLadder(plan.copy(rungs = next))
+                            tick()
+                        }.padding(vertical = 10.dp),
+                )
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Stepper("Each rung", "${plan.every} bar${if (plan.every > 1) "s" else ""}", tick,
+            { practice.setLadder(plan.copy(every = (plan.every - 1).coerceAtLeast(1))) }) { practice.setLadder(plan.copy(every = (plan.every + 1).coerceAtMost(16))) }
+        Toggle("At the top", if (plan.backDown) "Come back down" else "Start over", tick) { practice.setLadder(plan.copy(backDown = !plan.backDown)) }
+        Text("Changes land exactly on the next bar's 1. Keep the tempo; only the notes get denser.",
+            style = MaterialTheme.typography.bodySmall, color = c.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
+    }
+}
+
+// ── Polyrhythm ─────────────────────────────────────────────────────────────
+
+@Composable
+private fun ColumnScope.Polyrhythm(practice: PracticeController, metronome: MetronomeController, on: Boolean, tick: () -> Unit) {
+    val plan by practice.poly.collectAsStateWithLifecycle()
+    val state by metronome.state.collectAsStateWithLifecycle()
+    val beat by metronome.currentBeat.collectAsStateWithLifecycle()
+    val barStart by practice.barStartNs.collectAsStateWithLifecycle()
+    val m = state.meter.beatCount
+    val c = MaterialTheme.colorScheme
+    // LEARN: withFrameNanos runs once per screen frame, so the cross-rhythm dot
+    // moves smoothly; we work out where in the bar we are from when the "1" was heard.
+    var hit by remember { mutableStateOf(-1) }
+    LaunchedEffect(on, barStart, plan.count, state.bpm, m) {
+        if (!on || barStart == 0L) { hit = -1; return@LaunchedEffect }
+        val barNs = m * 60e9 / state.meter.beatsPerMinute(state.bpm)
+        while (true) {
+            androidx.compose.runtime.withFrameNanos { }
+            val f = ((System.nanoTime() - barStart) / barNs).coerceIn(0.0, 0.999)
+            hit = (f * plan.count).toInt()
+        }
+    }
+    Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+        Text("${plan.count} against $m", fontSize = 34.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp))
+        PolyRow("Beats", m, if (on) beat else -1, c.onSurface)
+        Spacer(Modifier.height(8.dp))
+        PolyRow("${plan.count}s", plan.count, hit, c.primary)
+        Text("Both rows start together on the 1. The second sound plays the ${plan.count}.",
+            style = MaterialTheme.typography.bodySmall, color = c.onSurfaceVariant, modifier = Modifier.padding(vertical = 8.dp))
+        Stepper("Cross-rhythm", "${plan.count} per bar", tick,
+            { practice.setPoly(plan.copy(count = (plan.count - 1).coerceAtLeast(2))) }) { practice.setPoly(plan.copy(count = (plan.count + 1).coerceAtMost(12))) }
+        Toggle("Normal click", if (plan.mainOnlyOne) "Only the 1" else "Every beat", tick) { practice.setPoly(plan.copy(mainOnlyOne = !plan.mainOnlyOne)) }
+        Text("Change the beats per bar with the metronome's time signature (4/4 gives 3 against 4).",
+            style = MaterialTheme.typography.bodySmall, color = c.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
+    }
+}
+
+/** One row of evenly spaced dots across the bar; [lit] is the one sounding. */
+@Composable
+private fun PolyRow(label: String, n: Int, lit: Int, color: Color) {
+    val c = MaterialTheme.colorScheme
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = c.onSurfaceVariant, modifier = Modifier.width(52.dp))
+        Canvas(Modifier.weight(1f).height(36.dp)) {
+            drawLine(c.outlineVariant, Offset(0f, size.height / 2), Offset(size.width, size.height / 2), strokeWidth = 2f)
+            for (i in 0 until n) {
+                val x = 12f + (size.width - 24f) * i / n
+                drawCircle(if (i == lit) color else c.outline, radius = if (i == lit) 13f else 8f, center = Offset(x, size.height / 2))
+            }
+        }
+    }
+}
+
+// ── Practice timer and history ─────────────────────────────────────────────
+
+private fun dayStart(): Long = java.util.Calendar.getInstance().apply {
+    set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0)
+    set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
+}.timeInMillis
+
+/** Seconds practised today, ticking up live while a tool runs. */
+@Composable
+private fun todaySeconds(practice: PracticeController): Int {
+    val history by practice.history.collectAsStateWithLifecycle()
+    val started by practice.runStartedAt.collectAsStateWithLifecycle()
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(started) {
+        while (started > 0) { now = System.currentTimeMillis(); kotlinx.coroutines.delay(1000) }
+    }
+    val live = if (started > 0) ((now - started) / 1000).toInt().coerceAtLeast(0) else 0
+    return PracticeLog.secondsSince(history, dayStart()) + live
+}
+
+private fun fmtDuration(sec: Int): String = if (sec >= 3600) "%d:%02d:%02d".format(sec / 3600, sec / 60 % 60, sec % 60) else "%d:%02d".format(sec / 60, sec % 60)
+
+@Composable
+private fun TodayChip(practice: PracticeController, onClick: () -> Unit) {
+    val goal by practice.goal.collectAsStateWithLifecycle()
+    val sec = todaySeconds(practice)
+    val c = MaterialTheme.colorScheme
+    Column(Modifier.clip(RoundedCornerShape(8.dp)).background(c.surfaceVariant).clickable(onClick = onClick)
+        .padding(horizontal = 10.dp, vertical = 5.dp), horizontalAlignment = Alignment.End) {
+        Text("Today ${fmtDuration(sec)}${if (goal > 0) " / $goal min" else ""}", style = MaterialTheme.typography.labelLarge)
+        if (goal > 0) {
+            val f = (sec / (goal * 60f)).coerceIn(0f, 1f)
+            Box(Modifier.width(110.dp).height(4.dp).clip(RoundedCornerShape(2.dp)).background(c.outlineVariant)) {
+                Box(Modifier.fillMaxWidth(f).height(4.dp).background(c.primary))
+            }
+        } else Text("History", style = MaterialTheme.typography.labelSmall, color = c.onSurfaceVariant)
+    }
+}
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun HistorySheet(practice: PracticeController, onDismiss: () -> Unit) {
+    val history by practice.history.collectAsStateWithLifecycle()
+    val goal by practice.goal.collectAsStateWithLifecycle()
+    val today = todaySeconds(practice)
+    val week = PracticeLog.secondsSince(history, dayStart() - 6 * 86_400_000L)
+    var confirmClear by remember { mutableStateOf(false) }
+    val c = MaterialTheme.colorScheme
+    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
+            Text("Practice history", style = MaterialTheme.typography.titleMedium)
+            Row(Modifier.fillMaxWidth().padding(vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                StatCard("Today", fmtDuration(today), if (goal > 0) "goal $goal min" else "", Modifier.weight(1f))
+                StatCard("Last 7 days", fmtDuration(week), "${history.count { it.startedAt >= dayStart() - 6 * 86_400_000L }} sessions", Modifier.weight(1f))
+            }
+            Text("Daily goal", style = MaterialTheme.typography.labelLarge, color = c.primary)
+            Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf(0, 10, 20, 30, 45, 60).forEach { m ->
+                    val sel = m == goal
+                    Text(if (m == 0) "Off" else "$m", textAlign = TextAlign.Center, style = MaterialTheme.typography.labelLarge,
+                        color = if (sel) c.onPrimary else c.onSurface,
+                        modifier = Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).background(if (sel) c.primary else c.surfaceVariant)
+                            .clickable { practice.setGoal(m) }.padding(vertical = 8.dp))
+                }
+            }
+            val fmt = remember { java.text.SimpleDateFormat("EEE d MMM, HH:mm", java.util.Locale.getDefault()) }
+            androidx.compose.foundation.lazy.LazyColumn(Modifier.fillMaxWidth().height(320.dp)) {
+                if (history.isEmpty()) item {
+                    Text("Sessions show up here when you stop a practice tool (anything over 20 seconds).",
+                        style = MaterialTheme.typography.bodySmall, color = c.onSurfaceVariant, modifier = Modifier.padding(vertical = 12.dp))
+                }
+                items(history.reversed().size) { i ->
+                    val e = history.reversed()[i]
+                    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                        Row {
+                            Text(e.tool, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f))
+                            Text(fmtDuration(e.seconds), style = MaterialTheme.typography.bodyMedium)
+                        }
+                        Text("${fmt.format(java.util.Date(e.startedAt))} · ${e.detail}", style = MaterialTheme.typography.bodySmall, color = c.onSurfaceVariant)
+                    }
+                }
+            }
+            if (history.isNotEmpty()) Text(
+                if (confirmClear) "Tap again to delete all history" else "Clear history",
+                style = MaterialTheme.typography.labelLarge, color = if (confirmClear) c.error else c.primary,
+                modifier = Modifier.clickable { if (confirmClear) { practice.clearHistory(); confirmClear = false } else confirmClear = true }
+                    .padding(vertical = 10.dp),
+            )
+        }
     }
 }
 

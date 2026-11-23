@@ -32,6 +32,10 @@ object NativeEngine {
     external fun nSetVolume(volume: Float)
     /** Practice: [on] clicking bars then [off] silent bars; [grow] = 1 adds a silent bar each round. 0, 0 = off. */
     external fun nSetGap(on: Int, off: Int, grow: Int)
+    /** Practice: switch to this many clicks per beat (1–4) exactly at the next bar line. */
+    external fun nSetSubdivisionAtNextBar(perBeat: Int)
+    /** Practice: [count] evenly spaced hits per bar in [sound] over the normal beats (0 = off). */
+    external fun nSetPoly(count: Int, sound: Int, mainOnlyOne: Boolean)
     /** Practice: clicking count-in bars before the gap pattern starts (set before starting). */
     external fun nSetLeadBars(bars: Int)
     /** Practice: randomly silence this % of beats (never beat 1). */
