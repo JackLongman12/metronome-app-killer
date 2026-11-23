@@ -17,8 +17,8 @@ Hobby project, GPL-3.0, not on the Play Store. Install it from [Releases](../../
 |---|---|---|
 | 0 | Project setup, CI releases, in-app updater, basic click | Done |
 | 1 | Native Oboe engine, 8 sounds, background playback, beat editor, time signature/sound pickers, flash/vibration, Bluetooth sync | Done |
-| 2 | Beat-tracking prototype (beat_this) on test songs | Next |
-| 3 | Local songs → tempo map, editor, play-along | Planned |
+| 2 | Beat-tracking prototype (beat_this), Songsterr benchmark, model comparison | Done |
+| 3 | Local songs → tempo map, parts/bars navigation, play-along with click | First version |
 | 4 | YouTube / SoundCloud (NewPipe Extractor), Spotify matching, share-to-app | Planned |
 | 5 | Speed trainer, gap click, A–B loop, slow-down, setlists, export | Planned |
 | 6 | Listen mode (live mic tracking) and timing feedback | Planned |
@@ -41,6 +41,8 @@ PlaybackService               keeps it running with the screen off (foreground s
 
 - `App.kt` creates the long-lived objects once when the app starts.
 - `update/` is the self-updater: it reads the latest GitHub Release and installs it.
+- `analysis/` turns a song into a tempo map: decode + resample, the beat model (ONNX Runtime, downloaded on first use), then `TempoMapBuilder` (a port of `tools/beat-lab/tempo_map.py`, checked by unit tests).
+- `songs/` is the song library, the Songs and Song screens, and `SongPlayer`, which mixes the click into the song's own audio so they never drift apart.
 - `.github/workflows/build.yml` builds and signs the APK on every push, then publishes it.
 
 ## Building
@@ -54,6 +56,8 @@ Requires JDK 17 and the Android SDK (platform `android-37.2`, build-tools 37, ND
 Release builds in CI are signed with a key stored in repository secrets, so every build installs over the previous one.
 
 ## Credits
+
+- Beat tracking: [beat_this](https://github.com/CPJKU/beat_this) by CPJKU (MIT), downloaded by the app on first use.
 
 - Fonts in the Comic book theme: [Bangers](https://github.com/googlefonts/bangers) and [Comic Neue](https://github.com/crozynski/comicneue), both under the SIL Open Font License 1.1.
 

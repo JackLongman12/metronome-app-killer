@@ -28,9 +28,10 @@ android {
         versionName = "0.1.$buildNumber"
         buildConfigField("String", "GITHUB_REPO", "\"$githubRepo\"")
 
-        // Only build the native engine for real phone CPUs (64-bit ARM, plus
-        // 32-bit ARM for older phones). Emulators on PCs use x86_64.
-        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
+        // Only ship 64-bit ARM code: that's every phone from the last ~8 years,
+        // and it keeps the APK small (ONNX Runtime alone is big per CPU type).
+        // Debug builds also include x86_64 so they run on PC emulators.
+        ndk { abiFilters += listOf("arm64-v8a") }
         externalNativeBuild {
             cmake { arguments += "-DANDROID_STL=c++_shared" }
         }
@@ -59,6 +60,9 @@ android {
     }
 
     buildTypes {
+        debug {
+            ndk { abiFilters += listOf("x86_64") }
+        }
         release {
             isMinifyEnabled = false
             // Falls back to the debug key locally so `assembleRelease` still works without secrets.
@@ -70,6 +74,11 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    // Store native libraries compressed inside the APK: a much smaller download.
+    packaging {
+        jniLibs { useLegacyPackaging = true }
     }
 
     buildFeatures {
@@ -85,6 +94,8 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.oboe)
+    implementation(libs.onnxruntime.android)   // runs the beat-tracking model on the phone
+    implementation(libs.media3.exoplayer)      // plays songs, with our click mixed in
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
@@ -93,4 +104,6 @@ dependencies {
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.compose.material3)
     debugImplementation(libs.compose.ui.tooling)
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303") // real org.json for PC-side tests
 }

@@ -2,6 +2,7 @@ package com.metronomekiller.app
 
 import android.app.Application
 import com.metronomekiller.app.engine.MetronomeController
+import com.metronomekiller.app.songs.SongLibrary
 
 /**
  * The Application object: created once, before any screen, and lives as long as
@@ -16,11 +17,14 @@ class App : Application() {
         private set
     lateinit var metronome: MetronomeController
         private set
+    lateinit var songs: SongLibrary
+        private set
 
     override fun onCreate() {
         super.onCreate()
         prefs = AppPrefs(this)
         metronome = MetronomeController(this, prefs)
+        songs = SongLibrary(this)
     }
 
     companion object {

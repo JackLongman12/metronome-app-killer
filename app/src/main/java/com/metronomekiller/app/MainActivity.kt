@@ -60,6 +60,8 @@ import com.metronomekiller.app.settings.SettingsScreen
 import com.metronomekiller.app.engine.BeatState
 import com.metronomekiller.app.ui.AppIcons
 import com.metronomekiller.app.ui.AppTheme
+import com.metronomekiller.app.songs.SongScreen
+import com.metronomekiller.app.songs.SongsScreen
 import com.metronomekiller.app.ui.isComic
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -131,6 +133,7 @@ class MainActivity : ComponentActivity() {
     private fun App() {
         var tab by rememberSaveable { mutableStateOf(Tab.METRONOME) }
         var screen by rememberSaveable { mutableStateOf(Screen.MAIN) }
+        var openSong by rememberSaveable { mutableStateOf<String?>(null) } // id of the song being viewed
         val prefs = metronome.prefs
 
         // Android 13+ needs permission to show the "metronome is playing" notification.
@@ -159,6 +162,7 @@ class MainActivity : ComponentActivity() {
         BackHandler(enabled = screen != Screen.MAIN) {
             screen = Screen.MAIN
         }
+        BackHandler(enabled = screen == Screen.MAIN && tab == Tab.SONGS && openSong != null) { openSong = null }
 
         // Full-screen flash on each beat (optional). A flat tint that fades fast — no glow.
         val flashOn by prefs.flash.collectAsStateWithLifecycle()
@@ -202,11 +206,12 @@ class MainActivity : ComponentActivity() {
                         onOpenCalibration = { screen = Screen.CALIBRATION }, onBack = null)
                     Tab.METRONOME -> MetronomeScreen(metronome, onTogglePlay = togglePlay,
                         onLoadSong = { tab = Tab.SONGS }, onComingSoon = say)
-                    Tab.SONGS -> EmptyState(
-                        "Add your first song",
-                        "Pick a song on your phone, share one from another app, or paste a YouTube, SoundCloud or Spotify link. You'll get a click track that follows its tempo.",
-                        "Add a song",
-                    ) { say("Song analysis is coming in a later build") }
+                    Tab.SONGS -> {
+                        val library = App.from(this@MainActivity).songs
+                        val song = openSong?.let { library.song(it) }
+                        if (song?.map != null) SongScreen(song, metronome, onBack = { openSong = null })
+                        else SongsScreen(library, onOpen = { openSong = it })
+                    }
                     Tab.PRACTICE -> EmptyState(
                         "Practice tools",
                         "Speed trainer, gap click and timing feedback will live here.",
