@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.metronomekiller.app.engine.BeatState
+import com.metronomekiller.app.engine.Meter
 import com.metronomekiller.app.engine.MetronomeController
 import com.metronomekiller.app.engine.Subdivision
 import com.metronomekiller.app.ui.AppIcons
@@ -81,7 +82,7 @@ fun CalibrationScreen(controller: MetronomeController, onBack: () -> Unit) {
 
     fun startTest() {
         offsets.clear(); taps = 0; result = null
-        controller.restore(before.copy(bpm = CAL_BPM, beats = List(4) { BeatState.NORMAL }, subdivision = Subdivision.QUARTERS))
+        controller.restore(before.copy(bpm = CAL_BPM, meter = Meter(4.0, 4.0), beats = List(4) { BeatState.NORMAL }, subdivision = Subdivision.QUARTERS))
         controller.start()
         running = true
     }

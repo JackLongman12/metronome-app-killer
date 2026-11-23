@@ -55,6 +55,8 @@ public:
     void setSubdivision(int perBeat) { subdivision_.store(perBeat < 1 ? 1 : (perBeat > 4 ? 4 : perBeat)); }
     void setBeats(const int32_t* states, int count);
     void setSound(int sound) { sound_.store(sound); }
+    /** Length of the bar's last beat as a fraction (3.5/4 → 0.5). 1.0 = a whole beat. */
+    void setLastBeatFraction(double f) { lastBeatFraction_.store(f <= 0.0 || f > 1.0 ? 1.0 : f); }
     void setVolume(float v) { volume_.store(v); }
 
     /**
@@ -95,6 +97,7 @@ private:
     std::atomic<int32_t> beats_[kMaxBeats];
     std::atomic<int> sound_{0};
     std::atomic<float> volume_{1.0f};
+    std::atomic<double> lastBeatFraction_{1.0};
 
     std::atomic<bool> clicksEnabled_{true};
     std::atomic<int> previewSound_{-1};

@@ -15,6 +15,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.core.content.ContextCompat
+import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Arrangement
@@ -89,7 +90,17 @@ class MainActivity : ComponentActivity() {
         // Make the phone's volume buttons control media (our click) volume,
         // even when the metronome isn't playing yet.
         volumeControlStream = android.media.AudioManager.STREAM_MUSIC
-        setContent { AppTheme { App() } }
+        setContent {
+            val colors by App.from(this).prefs.colors.collectAsStateWithLifecycle()
+            val dark = colors.isDark()
+            // Status-bar icons must be light on dark schemes and dark on light ones.
+            LaunchedEffect(dark) {
+                val style = if (dark) SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+                else SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT)
+                enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
+            }
+            AppTheme(colors) { App() }
+        }
     }
 
     override fun onStart() {

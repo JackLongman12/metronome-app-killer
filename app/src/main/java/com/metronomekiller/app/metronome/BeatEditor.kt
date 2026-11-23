@@ -48,6 +48,7 @@ import kotlin.math.abs
 @Composable
 fun BeatEditor(
     beats: List<BeatState>,
+    lastFraction: Float = 1f,
     current: Int,
     onCycle: (Int) -> Unit,
     onSet: (Int, BeatState) -> Unit,
@@ -55,7 +56,9 @@ fun BeatEditor(
 ) {
     Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(if (beats.size > 8) 4.dp else 8.dp)) {
         beats.forEachIndexed { i, state ->
-            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+            // A shortened last beat (decimal time signatures like 3.5/4) is drawn narrower.
+            val w = if (i == beats.lastIndex) lastFraction.coerceIn(0.25f, 1f) else 1f
+            Column(Modifier.weight(w), horizontalAlignment = Alignment.CenterHorizontally) {
                 BeatBlock(
                     number = i + 1,
                     state = state,

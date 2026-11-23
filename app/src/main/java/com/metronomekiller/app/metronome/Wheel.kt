@@ -18,6 +18,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -60,9 +62,15 @@ fun <T> Wheel(
         }
     }
 
-    // Report the choice once scrolling settles.
+    // Report the choice once a scroll settles — but only scrolls that actually
+    // happened, so merely opening the sheet never overwrites a custom value.
+    var scrolled by remember { mutableStateOf(false) }
     LaunchedEffect(listState.isScrollInProgress) {
-        if (!listState.isScrollInProgress) items.getOrNull(centered)?.let { if (it != selected) select(it) }
+        if (listState.isScrollInProgress) scrolled = true
+        else if (scrolled) {
+            scrolled = false
+            items.getOrNull(centered)?.let { if (it != selected) select(it) }
+        }
     }
     // Follow outside changes (e.g. tapping a preset) by scrolling to the new value.
     LaunchedEffect(selected) {

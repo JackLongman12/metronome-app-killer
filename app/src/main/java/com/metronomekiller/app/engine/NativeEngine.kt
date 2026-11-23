@@ -30,6 +30,7 @@ object NativeEngine {
     external fun nSetSubdivision(perBeat: Int)
     external fun nSetSound(sound: Int)
     external fun nSetVolume(volume: Float)
+    external fun nSetLastBeatFraction(fraction: Double)
     external fun nSetBeats(states: IntArray)
 
     /**

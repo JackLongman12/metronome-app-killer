@@ -33,6 +33,7 @@ JNIEXPORT void JNICALL JNI_FN(nPreview)(JNIEnv*, jobject, jint sound) { engine()
 JNIEXPORT void JNICALL JNI_FN(nSetTempo)(JNIEnv*, jobject, jdouble bpm) { engine()->setTempo(bpm); }
 JNIEXPORT void JNICALL JNI_FN(nSetSubdivision)(JNIEnv*, jobject, jint s) { engine()->setSubdivision(s); }
 JNIEXPORT void JNICALL JNI_FN(nSetSound)(JNIEnv*, jobject, jint s) { engine()->setSound(s); }
+JNIEXPORT void JNICALL JNI_FN(nSetLastBeatFraction)(JNIEnv*, jobject, jdouble f) { engine()->setLastBeatFraction(f); }
 JNIEXPORT void JNICALL JNI_FN(nSetVolume)(JNIEnv*, jobject, jfloat v) { engine()->setVolume(v); }
 
 JNIEXPORT void JNICALL JNI_FN(nSetBeats)(JNIEnv* env, jobject, jintArray states) {

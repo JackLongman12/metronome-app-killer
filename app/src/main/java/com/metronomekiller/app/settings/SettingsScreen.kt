@@ -14,6 +14,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -27,6 +28,14 @@ import kotlin.math.roundToInt
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.metronomekiller.app.BuildConfig
 import com.metronomekiller.app.engine.MetronomeController
+import com.metronomekiller.app.metronome.BpmDisplay
+import com.metronomekiller.app.ui.AppColors
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
 import com.metronomekiller.app.ui.AppIcons
 import com.metronomekiller.app.update.UpdateState
 import com.metronomekiller.app.update.UpdateViewModel
@@ -51,6 +60,8 @@ fun SettingsScreen(
     val vibrate by controller.prefs.vibrate.collectAsStateWithLifecycle()
     val accentsOnly by controller.prefs.flashAccentsOnly.collectAsStateWithLifecycle()
     val volume by controller.prefs.volume.collectAsStateWithLifecycle()
+    val display by controller.prefs.bpmDisplay.collectAsStateWithLifecycle()
+    val colors by controller.prefs.colors.collectAsStateWithLifecycle()
     val route by controller.route.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
@@ -60,6 +71,29 @@ fun SettingsScreen(
             Text("Settings", style = MaterialTheme.typography.titleLarge)
         }
 
+        SectionLabel("Appearance")
+        Text("Tempo display", modifier = Modifier.padding(start = 20.dp, top = 8.dp))
+        BpmDisplay.entries.forEach { d ->
+            Choice(d.label, d.description, selected = d == display) { controller.prefs.setBpmDisplay(d) }
+        }
+        Text("Colours", modifier = Modifier.padding(start = 20.dp, top = 12.dp))
+        AppColors.entries.forEach { c ->
+            Row(
+                Modifier.fillMaxWidth().clickable { controller.prefs.setColors(c) }.padding(horizontal = 20.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // A little swatch: the scheme's background with its accent dot.
+                Box(
+                    Modifier.size(32.dp).clip(CircleShape).background(c.swatchBg)
+                        .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) { Box(Modifier.size(12.dp).clip(CircleShape).background(c.swatchAccent)) }
+                Text(c.label, modifier = Modifier.weight(1f).padding(start = 16.dp))
+                RadioButton(selected = c == colors, onClick = { controller.prefs.setColors(c) })
+            }
+        }
+
+        HorizontalDivider(Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
         SectionLabel("Sound")
         Column(Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
             Text("Click volume · ${(volume * 100).roundToInt()}%")
@@ -126,6 +160,20 @@ private fun Item(title: String, subtitle: String, onClick: () -> Unit) {
     Column(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 12.dp)) {
         Text(title)
         Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun Choice(title: String, subtitle: String, selected: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        RadioButton(selected = selected, onClick = onClick)
     }
 }
 

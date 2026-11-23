@@ -76,7 +76,7 @@ class PlaybackService : Service() {
         )
         NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_metronome)
-            .setContentTitle("${s.bpm} BPM · ${s.beats.size}/${s.noteValue}")
+            .setContentTitle("${s.bpm} BPM · ${s.meter.label}")
             .setContentText(s.sound.label)
             .setContentIntent(open)
             .addAction(0, "Stop", stop)

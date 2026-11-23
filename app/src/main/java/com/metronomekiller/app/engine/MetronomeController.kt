@@ -32,8 +32,8 @@ import kotlinx.coroutines.launch
 /** Everything the metronome screen shows. Immutable: every change makes a new copy. */
 data class MetronomeState(
     val bpm: Int = 120,
-    val beats: List<BeatState> = TimeSignaturePreset.all[2].pattern(), // 4/4
-    val noteValue: Int = 4,
+    val meter: Meter = Meter(4.0, 4.0),
+    val beats: List<BeatState> = TimeSignaturePreset.common[2].pattern(), // 4/4
     val subdivision: Subdivision = Subdivision.QUARTERS,
     val sound: ClickSound = ClickSound.CLICK,
     val playing: Boolean = false,
@@ -100,7 +100,8 @@ class MetronomeController(private val context: Context, val prefs: AppPrefs) {
 
     private fun pushAll() {
         val s = _state.value
-        NativeEngine.nSetTempo(s.bpm.toDouble())
+        NativeEngine.nSetTempo(s.meter.beatsPerMinute(s.bpm))
+        NativeEngine.nSetLastBeatFraction(s.meter.lastBeatFraction)
         NativeEngine.nSetBeats(IntArray(s.beats.size) { s.beats[it].ordinal })
         NativeEngine.nSetSubdivision(s.subdivision.perBeat)
         NativeEngine.nSetSound(s.sound.ordinal)
@@ -145,12 +146,12 @@ class MetronomeController(private val context: Context, val prefs: AppPrefs) {
         })
     }
 
-    /** Set beats/note value; keeps the existing accents when only the count changes. */
-    fun setTimeSignature(beats: Int, noteValue: Int, pattern: List<BeatState>? = null) = edit { s ->
-        val list = pattern ?: List(beats) { i ->
+    /** Set the time signature; keeps your existing accents unless [pattern] is given. */
+    fun setTimeSignature(meter: Meter, pattern: List<BeatState>? = null) = edit { s ->
+        val list = pattern ?: List(meter.beatCount) { i ->
             s.beats.getOrNull(i) ?: if (i == 0) BeatState.ACCENT else BeatState.NORMAL
         }
-        s.copy(beats = list, noteValue = noteValue)
+        s.copy(meter = meter, beats = list)
     }
 
     fun setSubdivision(sub: Subdivision) = edit { it.copy(subdivision = sub) }

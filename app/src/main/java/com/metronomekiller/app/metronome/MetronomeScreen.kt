@@ -68,6 +68,7 @@ fun MetronomeScreen(
 ) {
     val s by controller.state.collectAsStateWithLifecycle()
     val current by controller.currentBeat.collectAsStateWithLifecycle()
+    val display by controller.prefs.bpmDisplay.collectAsStateWithLifecycle()
 
     // `remember { mutableStateOf(...) }` = local UI state that survives recomposition.
     var editBpm by remember { mutableStateOf(false) }
@@ -82,52 +83,32 @@ fun MetronomeScreen(
 
         Spacer(Modifier.weight(1f))
 
-        // Tempo readout — tap to type an exact value
-        Column(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { editBpm = true }.padding(8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Text("${s.bpm}", fontSize = 84.sp, fontWeight = FontWeight.Medium, lineHeight = 84.sp)
+        // The tempo control, in whichever style is picked in Settings → Appearance.
+        TempoDisplay(display, s, if (s.playing) current else -1, controller, onEditBpm = { editBpm = true })
+
+        // The beat ring already shows and edits the beats, so it replaces the beat row.
+        if (display != BpmDisplay.RING) {
+            Spacer(Modifier.height(24.dp))
+            BeatEditor(
+                beats = s.beats,
+                lastFraction = s.meter.lastBeatFraction.toFloat(),
+                current = if (s.playing) current else -1,
+                onCycle = controller::cycleBeat,
+                onSet = controller::setBeat,
+            )
             Text(
-                "BPM · ${MetronomeController.tempoName(s.bpm)}",
-                style = MaterialTheme.typography.bodyMedium,
+                "Tap a beat to change it, or swipe it up or down",
+                style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
             )
         }
-
-        Spacer(Modifier.height(16.dp))
-
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            OutlinedIconButton(onClick = { controller.nudge(-1) }) { Icon(AppIcons.Remove, "Slower") }
-            Slider(
-                value = s.bpm.toFloat(),
-                onValueChange = { controller.setBpm(it.roundToInt()) },
-                valueRange = MetronomeController.MIN_BPM.toFloat()..MetronomeController.MAX_BPM.toFloat(),
-                modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
-            )
-            OutlinedIconButton(onClick = { controller.nudge(1) }) { Icon(AppIcons.Add, "Faster") }
-        }
-
-        Spacer(Modifier.height(24.dp))
-
-        BeatEditor(
-            beats = s.beats,
-            current = if (s.playing) current else -1,
-            onCycle = controller::cycleBeat,
-            onSet = controller::setBeat,
-        )
-        Text(
-            "Tap a beat to change it, or swipe it up or down",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-        )
 
         Spacer(Modifier.height(16.dp))
 
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)) {
-            Chip("${s.beats.size}/${s.noteValue}") { editSig = true }
+            Chip(s.meter.label) { editSig = true }
             Box {
                 var open by remember { mutableStateOf(false) }
                 Chip(s.subdivision.label) { open = true }
@@ -168,11 +149,10 @@ fun MetronomeScreen(
 
     if (editBpm) BpmDialog(s.bpm, onDismiss = { editBpm = false }) { controller.setBpm(it); editBpm = false }
     if (editSig) TimeSignatureSheet(
-        beats = s.beats.size,
-        noteValue = s.noteValue,
+        initial = s.meter,
         currentPattern = s.beats,
         onDismiss = { editSig = false },
-    ) { b, n, pattern -> controller.setTimeSignature(b, n, pattern); editSig = false }
+    ) { meter, pattern -> controller.setTimeSignature(meter, pattern); editSig = false }
     if (pickSound) SoundSheet(
         selected = s.sound,
         onSelect = { controller.setSound(it); controller.preview(it) },

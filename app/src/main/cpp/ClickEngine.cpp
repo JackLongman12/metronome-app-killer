@@ -273,12 +273,22 @@ oboe::DataCallbackResult ClickEngine::onAudioReady(oboe::AudioStream* stream, vo
                 ++seq_;
             }
 
-            // advance position for the next click
-            if (++subPos_ >= sub) {
+            // Advance to the next click.
+            const double lastFrac = lastBeatFraction_.load();
+            if (beatIdx_ == count - 1 && lastFrac < 0.999) {
+                // Decimal numerator (e.g. 3.5/4): the last beat is shortened to
+                // `lastFrac` of a beat. It gets a single click (no subdivisions),
+                // then the next bar starts early.
+                framesToNext_ += interval * sub * lastFrac;
                 subPos_ = 0;
-                beatIdx_ = (beatIdx_ + 1) % count;
+                beatIdx_ = 0;
+            } else {
+                if (++subPos_ >= sub) {
+                    subPos_ = 0;
+                    beatIdx_ = (beatIdx_ + 1) % count;
+                }
+                framesToNext_ += interval;
             }
-            framesToNext_ += interval;
         }
         float v = 0.0f;
         if (voice_ && voicePos_ < voice_->size()) v = (*voice_)[voicePos_++] * vol;
