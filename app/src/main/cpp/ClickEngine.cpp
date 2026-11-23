@@ -233,7 +233,7 @@ oboe::DataCallbackResult ClickEngine::onAudioReady(oboe::AudioStream* stream, vo
     const int sr = stream->getSampleRate();
     const int sub = subdivision_.load();
     const double bpm = bpm_.load();
-    const double interval = sr * 60.0 / (bpm * sub);
+    double interval = sr * 60.0 / (bpm * sub);
     int sound = sound_.load();
     if (sound < 0 || sound >= static_cast<int>(voices_.size())) sound = 0;
     const float vol = volume_.load();
@@ -244,6 +244,8 @@ oboe::DataCallbackResult ClickEngine::onAudioReady(oboe::AudioStream* stream, vo
         beatIdx_ = 0;
         subPos_ = 0;
         framesToNext_ = 0.0;
+        barInRound_ = -1;
+        round_ = 0;
     }
 
     const int pv = previewSound_.exchange(-1);
@@ -258,10 +260,40 @@ oboe::DataCallbackResult ClickEngine::onAudioReady(oboe::AudioStream* stream, vo
             const int count = beatCount_.load();
             if (beatIdx_ >= count) beatIdx_ = 0;
             if (subPos_ >= sub) subPos_ = 0;
-            const int32_t state = beats_[beatIdx_].load();
+            int32_t state = beats_[beatIdx_].load();
+
+            if (beatIdx_ == 0 && subPos_ == 0) {
+                // A new bar. Speed trainer: take the queued tempo now, on the "1".
+                const double next = pendingBpm_.exchange(-1.0);
+                if (next > 0.0) {
+                    bpm_.store(next);
+                    interval = sr * 60.0 / (next * sub);
+                }
+                // Gap click: which bar of the round is this, and is it a silent one?
+                const int on = gapOn_.load(), off = gapOff_.load();
+                if (on > 0 && off > 0) {
+                    int offNow = off + (gapGrow_.load() ? round_ : 0);
+                    if (offNow > 8) offNow = 8;
+                    if (++barInRound_ >= on + offNow) { barInRound_ = 0; ++round_; }
+                    barSilent_ = barInRound_ >= on;
+                } else {
+                    barInRound_ = -1; round_ = 0; barSilent_ = false;
+                }
+            }
+            if (subPos_ == 0) {
+                // Random mutes: a quick xorshift random number (no allocation, safe here).
+                beatMuted_ = false;
+                const int chance = muteChance_.load();
+                if (chance > 0 && beatIdx_ != 0) {
+                    rng_ ^= rng_ << 13; rng_ ^= rng_ >> 17; rng_ ^= rng_ << 5;
+                    beatMuted_ = static_cast<int>(rng_ % 100u) < chance;
+                }
+            }
+            const bool silent = barSilent_ || beatMuted_;
+            if (beatMuted_) state = kMute; // shows as a muted beat on screen
 
             const bool accented = state == kAccent || state == kStrong;
-            if (state == kMute) voice_ = nullptr;
+            if (state == kMute || silent) voice_ = nullptr;
             else if (subPos_ != 0) voice_ = &voices_[sound][2];
             else voice_ = &voices_[sound][accented ? 0 : 1];
             // Strong = the accent sound pushed harder into the soft limiter.

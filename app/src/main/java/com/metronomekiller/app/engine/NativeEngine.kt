@@ -30,6 +30,12 @@ object NativeEngine {
     external fun nSetSubdivision(perBeat: Int)
     external fun nSetSound(sound: Int)
     external fun nSetVolume(volume: Float)
+    /** Practice: [on] clicking bars then [off] silent bars; [grow] = 1 adds a silent bar each round. 0, 0 = off. */
+    external fun nSetGap(on: Int, off: Int, grow: Int)
+    /** Practice: randomly silence this % of beats (never beat 1). */
+    external fun nSetRandomMute(percent: Int)
+    /** Practice: switch to this engine tempo exactly at the next bar line. */
+    external fun nSetTempoAtNextBar(bpm: Double)
     external fun nSetLastBeatFraction(fraction: Double)
     external fun nSetBeats(states: IntArray)
 

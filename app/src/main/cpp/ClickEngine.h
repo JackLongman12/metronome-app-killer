@@ -60,6 +60,17 @@ public:
     void setLastBeatFraction(double f) { lastBeatFraction_.store(f <= 0.0 || f > 1.0 ? 1.0 : f); }
     void setVolume(float v) { volume_.store(v); }
 
+    // ── Practice tools ──
+    /**
+     * Gap click: [on] bars with the click, then [off] silent bars, repeating.
+     * [grow] = 1 adds one more silent bar each round (up to 8). on/off 0 = off.
+     */
+    void setGap(int on, int off, int grow) { gapOn_.store(on); gapOff_.store(off); gapGrow_.store(grow); }
+    /** Randomly silence this percentage of beats (never beat 1). 0 = off. */
+    void setRandomMute(int percent) { muteChance_.store(percent); }
+    /** Switch to [bpm] exactly when the next bar starts (speed trainer). */
+    void setTempoAtNextBar(double bpm) { pendingBpm_.store(bpm); }
+
     /**
      * Latest beat whose sound has reached the output by [nowNs] (CLOCK_MONOTONIC),
      * after shifting by [offsetNs] of extra output latency (e.g. Bluetooth).
@@ -100,6 +111,12 @@ private:
     std::atomic<float> volume_{1.0f};
     std::atomic<double> lastBeatFraction_{1.0};
 
+    std::atomic<int> gapOn_{0};
+    std::atomic<int> gapOff_{0};
+    std::atomic<int> gapGrow_{0};
+    std::atomic<int> muteChance_{0};
+    std::atomic<double> pendingBpm_{-1.0};
+
     std::atomic<bool> clicksEnabled_{true};
     std::atomic<int> previewSound_{-1};
     std::atomic<bool> rewind_{false};
@@ -113,6 +130,11 @@ private:
     int beatIdx_ = 0;
     int subPos_ = 0;
     int64_t seq_ = 0;
+    int barInRound_ = -1;   // gap click: bar number within the current round (-1 = before bar 1)
+    int round_ = 0;
+    bool barSilent_ = false;
+    bool beatMuted_ = false;
+    uint32_t rng_ = 0x9E3779B9u;
     const std::vector<float>* voice_ = nullptr;
     size_t voicePos_ = 0;
     float voiceGain_ = 1.0f;

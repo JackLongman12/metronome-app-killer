@@ -164,13 +164,16 @@ class MainActivity : ComponentActivity() {
         // Android 13+ needs permission to show the "metronome is playing" notification.
         // We ask once, the first time you press play. Playback works either way.
         val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
-        val togglePlay = {
+        val askNotifications = {
             if (Build.VERSION.SDK_INT >= 33 && !prefs.askedNotifications &&
                 ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
             ) {
                 prefs.askedNotifications = true
                 notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
+        }
+        val togglePlay = {
+            askNotifications()
             metronome.togglePlay()
         }
         val snackbar = remember { SnackbarHostState() }
@@ -237,11 +240,9 @@ class MainActivity : ComponentActivity() {
                         if (song?.map != null) SongScreen(song, metronome, library, onBack = { openSong = null })
                         else SongsScreen(library, onOpen = { openSong = it })
                     }
-                    Tab.PRACTICE -> EmptyState(
-                        "Practice tools",
-                        "Speed trainer, gap click and timing feedback will live here.",
-                        null,
-                    ) {}
+                    Tab.PRACTICE -> com.metronomekiller.app.practice.PracticeScreen(
+                        App.from(this@MainActivity).practice, metronome, onPlay = askNotifications,
+                    )
                     Tab.SETLISTS -> EmptyState(
                         "Build a setlist",
                         "Save tempos and songs in the order you play them.",

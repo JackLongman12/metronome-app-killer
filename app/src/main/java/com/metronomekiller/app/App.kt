@@ -19,12 +19,15 @@ class App : Application() {
         private set
     lateinit var songs: SongLibrary
         private set
+    lateinit var practice: com.metronomekiller.app.practice.PracticeController
+        private set
 
     override fun onCreate() {
         super.onCreate()
         prefs = AppPrefs(this)
         metronome = MetronomeController(this, prefs)
         songs = SongLibrary(this)
+        practice = com.metronomekiller.app.practice.PracticeController(this, metronome)
     }
 
     companion object {
