@@ -7,6 +7,12 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
+/*
+ * LEARN: Material 3 components (buttons, sliders, sheets...) read their colours
+ * from a ColorScheme by role — `primary`, `surface`, `onSurface` (text drawn on
+ * a surface), etc. Define the roles once here and every component follows.
+ * We switch between the light and dark scheme with the phone's system setting.
+ */
 // Flat, neutral palette with a single warm accent. No gradients, no glow.
 private val Light = lightColorScheme(
     primary = Color(0xFFD9512C),

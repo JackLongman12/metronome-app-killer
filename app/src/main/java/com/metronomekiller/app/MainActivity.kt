@@ -1,10 +1,20 @@
 package com.metronomekiller.app
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.core.content.ContextCompat
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Arrangement
@@ -44,8 +54,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.metronomekiller.app.metronome.MetronomeScreen
-import com.metronomekiller.app.metronome.MetronomeViewModel
+import com.metronomekiller.app.settings.CalibrationScreen
 import com.metronomekiller.app.settings.SettingsScreen
+import com.metronomekiller.app.engine.BeatState
 import com.metronomekiller.app.ui.AppIcons
 import com.metronomekiller.app.ui.AppTheme
 import com.metronomekiller.app.update.UpdateState
@@ -59,8 +70,17 @@ private enum class Tab(val label: String, val icon: ImageVector) {
     SETLISTS("Setlists", AppIcons.List),
 }
 
+private enum class Screen { MAIN, SETTINGS, CALIBRATION }
+
+/**
+ * The app's only Activity (a "window" Android gives us). All screens are
+ * Compose functions swapped inside it, which keeps navigation simple.
+ *
+ * LEARN: `by viewModels()` creates the UpdateViewModel once and hands back the
+ * same one after rotation, so an in-progress download isn't lost.
+ */
 class MainActivity : ComponentActivity() {
-    private val metronome: MetronomeViewModel by viewModels()
+    private val metronome get() = App.from(this).metronome
     private val updates: UpdateViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -77,24 +97,57 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun App() {
         var tab by rememberSaveable { mutableStateOf(Tab.METRONOME) }
-        var settingsOpen by rememberSaveable { mutableStateOf(false) }
+        var screen by rememberSaveable { mutableStateOf(Screen.MAIN) }
+        val prefs = metronome.prefs
+
+        // Android 13+ needs permission to show the "metronome is playing" notification.
+        // We ask once, the first time you press play. Playback works either way.
+        val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
+        val togglePlay = {
+            if (Build.VERSION.SDK_INT >= 33 && !prefs.askedNotifications &&
+                ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+            ) {
+                prefs.askedNotifications = true
+                notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+            metronome.togglePlay()
+        }
         val snackbar = remember { SnackbarHostState() }
         val scope = rememberCoroutineScope()
         val say: (String) -> Unit = { msg -> scope.launch { snackbar.showSnackbar(msg) } }
 
         // Keep the screen on while the click is running.
-        val playing = metronome.ui.collectAsStateWithLifecycle().value.playing
+        val playing = metronome.state.collectAsStateWithLifecycle().value.playing
         LaunchedEffect(playing) {
             if (playing) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
 
-        BackHandler(enabled = settingsOpen) { settingsOpen = false }
+        BackHandler(enabled = screen != Screen.MAIN) {
+            screen = if (screen == Screen.CALIBRATION) Screen.SETTINGS else Screen.MAIN
+        }
 
+        // Full-screen flash on each beat (optional). A flat tint that fades fast — no glow.
+        val flashOn by prefs.flash.collectAsStateWithLifecycle()
+        val flashAlpha = remember { Animatable(0f) }
+        var flashAccent by remember { mutableStateOf(false) }
+        LaunchedEffect(flashOn) {
+            if (!flashOn) return@LaunchedEffect
+            metronome.beatEvents.collect { e ->
+                if (e.state == BeatState.MUTE) return@collect
+                flashAccent = e.state == BeatState.ACCENT
+                launch {
+                    flashAlpha.snapTo(if (flashAccent) 0.35f else 0.14f)
+                    flashAlpha.animateTo(0f, tween(160))
+                }
+            }
+        }
+
+        Box(Modifier.fillMaxSize()) {
         Scaffold(
             snackbarHost = { SnackbarHost(snackbar) },
             bottomBar = {
-                if (!settingsOpen) NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
+                if (screen == Screen.MAIN) NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
                     Tab.entries.forEach { t ->
                         NavigationBarItem(
                             selected = tab == t,
@@ -107,10 +160,14 @@ class MainActivity : ComponentActivity() {
             },
         ) { padding ->
             Column(Modifier.fillMaxSize().padding(padding)) {
-                if (settingsOpen) {
-                    SettingsScreen(updates, onBack = { settingsOpen = false })
+                if (screen == Screen.SETTINGS) {
+                    SettingsScreen(updates, metronome, onOpenCalibration = { screen = Screen.CALIBRATION },
+                        onBack = { screen = Screen.MAIN })
+                } else if (screen == Screen.CALIBRATION) {
+                    CalibrationScreen(metronome, onBack = { screen = Screen.SETTINGS })
                 } else when (tab) {
-                    Tab.METRONOME -> MetronomeScreen(metronome, onOpenSettings = { settingsOpen = true }, onComingSoon = say)
+                    Tab.METRONOME -> MetronomeScreen(metronome, onTogglePlay = togglePlay,
+                        onOpenSettings = { screen = Screen.SETTINGS }, onComingSoon = say)
                     Tab.SONGS -> EmptyState(
                         "Add your first song",
                         "Pick a song on your phone, share one from another app, or paste a YouTube, SoundCloud or Spotify link. You'll get a click track that follows its tempo.",
@@ -128,6 +185,12 @@ class MainActivity : ComponentActivity() {
                     ) { say("Setlists are coming in a later build") }
                 }
             }
+        }
+
+        if (flashAlpha.value > 0f) {
+            val c = if (flashAccent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+            Box(Modifier.fillMaxSize().background(c.copy(alpha = flashAlpha.value)))
+        }
         }
 
         UpdateDialog()

@@ -8,6 +8,11 @@ import androidx.core.content.IntentCompat
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
+/*
+ * LEARN: a BroadcastReceiver is code Android calls when something happens
+ * (here: "your install finished / needs the user's OK"). It's declared in
+ * AndroidManifest.xml. It must be quick — it just reacts and returns.
+ */
 /** Receives PackageInstaller session results and relays failures to the UI. */
 class InstallResultReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {

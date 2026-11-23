@@ -16,16 +16,36 @@ Hobby project, GPL-3.0, not on the Play Store. Install it from [Releases](../../
 | Phase | What | State |
 |---|---|---|
 | 0 | Project setup, CI releases, in-app updater, basic click | Done |
-| 1 | Low-latency native engine (Oboe), Bluetooth latency calibration, flash/haptics | Next |
-| 2 | Beat-tracking prototype (beat_this) on test songs | Planned |
+| 1 | Native Oboe engine, 8 sounds, background playback, beat editor, time signature/sound pickers, flash/vibration, Bluetooth sync | Done |
+| 2 | Beat-tracking prototype (beat_this) on test songs | Next |
 | 3 | Local songs → tempo map, editor, play-along | Planned |
 | 4 | YouTube / SoundCloud (NewPipe Extractor), Spotify matching, share-to-app | Planned |
 | 5 | Speed trainer, gap click, A–B loop, slow-down, setlists, export | Planned |
 | 6 | Listen mode (live mic tracking) and timing feedback | Planned |
 
+## How it's built
+
+If you're reading the code to learn, start here. Comments marked `LEARN:` explain the concepts.
+
+```
+UI (Jetpack Compose)          app/src/main/java/.../metronome, settings, MainActivity.kt
+   │  reads StateFlows, calls methods
+   ▼
+MetronomeController           engine/MetronomeController.kt: one app-wide owner of state
+   │  JNI calls (NativeEngine.kt)
+   ▼
+C++ ClickEngine on Oboe       app/src/main/cpp: sample-accurate clicks on a real-time thread
+   ▲
+PlaybackService               keeps it running with the screen off (foreground service)
+```
+
+- `App.kt` creates the long-lived objects once when the app starts.
+- `update/` is the self-updater: it reads the latest GitHub Release and installs it.
+- `.github/workflows/build.yml` builds and signs the APK on every push, then publishes it.
+
 ## Building
 
-Requires JDK 17 and the Android SDK (platform `android-37.2`, build-tools 37).
+Requires JDK 17 and the Android SDK (platform `android-37.2`, build-tools 37, NDK 30.0.16248370, CMake 4.1.2).
 
 ```
 ./gradlew assembleDebug

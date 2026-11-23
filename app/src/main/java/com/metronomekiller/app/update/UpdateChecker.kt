@@ -21,6 +21,15 @@ data class ReleaseInfo(
     val apkSize: Long,
 )
 
+/**
+ * LEARN — coroutines and threads:
+ * Network calls are slow, and Android crashes an app that does networking on the
+ * main (UI) thread. `suspend fun` + `withContext(Dispatchers.IO)` moves the work
+ * to a background thread pool and pauses (not blocks) the caller until it's done.
+ *
+ * We call GitHub's public REST API — no login needed for public repos
+ * (limit: 60 requests/hour per IP, plenty for "check on launch").
+ */
 object UpdateChecker {
     private const val TIMEOUT_MS = 15_000
 

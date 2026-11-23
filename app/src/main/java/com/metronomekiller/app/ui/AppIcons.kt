@@ -7,6 +7,12 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.addPathNodes
 import androidx.compose.ui.unit.dp
 
+/*
+ * LEARN: an ImageVector is a scalable icon described by SVG-style path data
+ * ("M8,5v14l11,-7z" = move to 8,5, line down 14, line to 19,12, close = a play
+ * triangle). Icon() tints it with the current content colour, so one icon works
+ * in light and dark mode.
+ */
 /** Small set of Material-style outline icons, so we don't ship the huge icons library. */
 object AppIcons {
     private fun icon(name: String, path: String) =
@@ -40,5 +46,10 @@ object AppIcons {
         "tap",
         "M12,7a5,5 0,1 0,0 10a5,5 0,1 0,0 -10zM12,15a3,3 0,1 1,0 -6a3,3 0,1 1,0 6z"
     )
-    val Metronome = icon("metronome", "M10,2h4l5,20H5L10,2zM11.6,4L7.6,20h8.8L12.4,4h-0.8zM11,9.5l1.6,0.4 -2.2,8.1 -1.6,-0.4z")
+    val Check = icon("check", "M9,16.17L4.83,12l-1.42,1.41L9,19 21,7l-1.41,-1.41z")
+    val Volume = icon(
+        "volume",
+        "M3,9v6h4l5,5V4L7,9H3zM16.5,12c0,-1.77 -1.02,-3.29 -2.5,-4.03v8.05c1.48,-0.73 2.5,-2.25 2.5,-4.02z"
+    )
+    val Metronome =icon("metronome", "M10,2h4l5,20H5L10,2zM11.6,4L7.6,20h8.8L12.4,4h-0.8zM11,9.5l1.6,0.4 -2.2,8.1 -1.6,-0.4z")
 }

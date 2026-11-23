@@ -1,11 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  LEARN: the manifest is the app's ID card for Android: which permissions it
+  needs, which screens (activities), background services and receivers exist,
+  and which one opens from the launcher icon.
+-->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Self-update: install APKs downloaded from this repo's GitHub Releases -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Keep clicking with the screen off (foreground service + its notification) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Vibrate on the beat -->
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <application
+        android:name=".App"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher"
@@ -22,6 +34,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <service
+            android:name=".PlaybackService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
 
         <receiver
             android:name=".update.InstallResultReceiver"

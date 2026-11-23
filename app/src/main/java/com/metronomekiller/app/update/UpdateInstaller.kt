@@ -11,6 +11,16 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 
+/**
+ * LEARN — how an app can update itself:
+ * 1. Android only lets apps install APKs if the user allowed "Install unknown
+ *    apps" for that app (checked by [canInstall]).
+ * 2. The new APK must be signed with the SAME key as the installed one, or
+ *    Android refuses. That's why CI signs every build with one secret key.
+ * 3. The new APK's versionCode must be higher (CI uses the run number).
+ * PackageInstaller "sessions" are the modern API: open a session, stream the
+ * APK bytes into it, commit, and Android reports back through a broadcast.
+ */
 object UpdateInstaller {
 
     fun canInstall(context: Context): Boolean =

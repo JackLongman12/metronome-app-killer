@@ -11,6 +11,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import java.io.File
 
+/**
+ * LEARN — modelling UI state with a sealed interface:
+ * The updater is always in exactly ONE of these states. A sealed type lets
+ * `when (state)` check that every case is handled — forget one and the code
+ * won't compile. The UI just draws whatever the current state is.
+ */
 sealed interface UpdateState {
     data object Idle : UpdateState
     data object Checking : UpdateState
@@ -22,6 +28,11 @@ sealed interface UpdateState {
     data class Failed(val message: String) : UpdateState
 }
 
+/**
+ * LEARN: a ViewModel survives screen rotation (the Activity is destroyed and
+ * re-created, the ViewModel is not). `viewModelScope` runs coroutines that are
+ * cancelled automatically if the ViewModel is ever cleared.
+ */
 class UpdateViewModel(app: Application) : AndroidViewModel(app) {
     private val prefs = app.getSharedPreferences("updates", Context.MODE_PRIVATE)
     private val updateDir = File(app.cacheDir, "updates")
