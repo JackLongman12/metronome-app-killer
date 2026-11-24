@@ -12,6 +12,7 @@
     <key>CFBundleVersion</key><string>__BUILD__</string>
     <key>LSMinimumSystemVersion</key><string>13.0</string>
     <key>LSApplicationCategoryType</key><string>public.app-category.music</string>
+    <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>NSHighResolutionCapable</key><true/>
     <key>NSSupportsAutomaticTermination</key><false/>
     <key>GitHubRepo</key><string>__REPO__</string>

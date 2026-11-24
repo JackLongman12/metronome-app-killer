@@ -30,6 +30,12 @@ strip -x "$APP/Contents/MacOS/MetronomeKiller"
 cp ../app/src/main/assets/sounds/*.wav "$APP/Contents/Resources/sounds/"
 sed "s/__BUILD__/$BUILD/g; s#__REPO__#$REPO#g" Info.plist > "$APP/Contents/Info.plist"
 
+# The app icon: drawn at every size by tools/MakeIcon.swift, then packed into
+# one .icns file (iconutil comes with macOS).
+swift tools/MakeIcon.swift build/AppIcon.iconset
+iconutil -c icns build/AppIcon.iconset -o "$APP/Contents/Resources/AppIcon.icns"
+rm -rf build/AppIcon.iconset
+
 # LEARN: Apple Silicon Macs refuse to run code with no signature at all. "-" is
 # an "ad-hoc" signature: free, no Apple account, proves nothing about who made
 # it, but lets the app run. (That's why macOS asks before opening it the first time.)

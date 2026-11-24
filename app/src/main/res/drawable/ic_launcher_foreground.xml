@@ -1,20 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Simple metronome silhouette: trapezoid body + pendulum arm -->
+<!--
+  App icon: a plain white smiley (two eyes and a smile).
+
+  LEARN: an "adaptive icon" is 108x108dp, but each phone crops it to its own
+  shape (circle, squircle...) and only the middle 72dp is always visible. So
+  the face sits well inside the middle, around the centre point (54, 54).
+  Android 13+ can also show it as a themed (single-colour) icon, using this
+  same drawing as the "monochrome" layer.
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path
-        android:fillColor="#FFFF5A36"
-        android:pathData="M46,30 L62,30 L74,78 L34,78 Z" />
-    <path
-        android:fillColor="#FF101114"
-        android:pathData="M42,66 L66,66 L68,72 L40,72 Z" />
+    <!-- left eye: a circle of radius 4.8 at (43.6, 47.6), drawn as two half-arcs -->
     <path
         android:fillColor="#FFFFFFFF"
-        android:pathData="M53,70 L56,71 L69,36 L66,35 Z" />
+        android:pathData="M38.8,47.6 a4.8,4.8 0 1,0 9.6,0 a4.8,4.8 0 1,0 -9.6,0 Z" />
+    <!-- right eye at (64.4, 47.6) -->
     <path
         android:fillColor="#FFFFFFFF"
-        android:pathData="M61,48 L67,50 L65,55 L59,53 Z" />
+        android:pathData="M59.6,47.6 a4.8,4.8 0 1,0 9.6,0 a4.8,4.8 0 1,0 -9.6,0 Z" />
+    <!-- the smile: a curve from left to right, pulled down by the middle point -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="4.8"
+        android:strokeLineCap="round"
+        android:pathData="M39.6,62 Q54,74.8 68.4,62" />
 </vector>
