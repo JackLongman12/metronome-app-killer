@@ -1,4 +1,4 @@
-// Draws the app icon (a white smiley on teal) at every size macOS wants, into
+// Draws the app icon (a black smiley on white) at every size macOS wants, into
 // an ".iconset" folder. build.sh then turns that folder into AppIcon.icns.
 //
 //   swift tools/MakeIcon.swift build/AppIcon.iconset
@@ -30,17 +30,17 @@ func draw(_ px: Int) -> CGImage {
     // 100-pixel margin all round (room for the Dock's shadow and highlight).
     let body = CGRect(x: 100, y: 100, width: 824, height: 824)
     ctx.addPath(CGPath(roundedRect: body, cornerWidth: 185, cornerHeight: 185, transform: nil))
-    ctx.setFillColor(CGColor(srgbRed: 0x1D / 255.0, green: 0x9E / 255.0, blue: 0x75 / 255.0, alpha: 1))
+    ctx.setFillColor(CGColor(gray: 1, alpha: 1))
     ctx.fillPath()
 
     // Design units (0–100) → pixels inside the rounded square.
     func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: 100 + x * 8.24, y: 100 + y * 8.24) }
     let unit: CGFloat = 8.24
-    ctx.setFillColor(CGColor(gray: 1, alpha: 1))
+    ctx.setFillColor(CGColor(gray: 0, alpha: 1))
     for c in [p(37, 42), p(63, 42)] {
         ctx.fillEllipse(in: CGRect(x: c.x - 6 * unit, y: c.y - 6 * unit, width: 12 * unit, height: 12 * unit))
     }
-    ctx.setStrokeColor(CGColor(gray: 1, alpha: 1))
+    ctx.setStrokeColor(CGColor(gray: 0, alpha: 1))
     ctx.setLineWidth(6 * unit)
     ctx.setLineCap(.round)
     ctx.move(to: p(32, 60))

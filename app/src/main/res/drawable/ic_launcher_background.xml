@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- App icon background: the app's teal (same as the Mac icon). -->
+<!-- App icon background: plain white (same as the Mac icon). -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-    <solid android:color="#FF1D9E75" />
+    <solid android:color="#FFFFFFFF" />
 </shape>
