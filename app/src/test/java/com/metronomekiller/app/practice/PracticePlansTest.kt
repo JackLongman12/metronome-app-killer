@@ -39,6 +39,21 @@ class PracticePlansTest {
         assertEquals(listOf(true to false, true to false, false to false, false to true, false to false), states)
     }
 
+    @Test fun trainerTimeToTop() {
+        // 4 tempos (90, 94, 98, 100), 2 bars each: the top starts after 6 bars.
+        val p = TrainerPlan(from = 90, to = 100, step = 4, every = 2)
+        assertEquals(6.0, p.secondsToTop(0) { 1.0 }, 1e-9)
+        assertEquals(2.0, p.secondsToTop(4) { 1.0 }, 1e-9)
+        assertEquals(0.0, p.secondsToTop(7) { 1.0 }, 1e-9)
+    }
+
+    @Test fun trainerStepsForSkipping() {
+        val p = TrainerPlan(from = 100, to = 108, step = 4, every = 3)
+        assertEquals(2, p.stepOf(7))
+        assertEquals(2, p.lastStep)
+        assertEquals(4, p.copy(top = TrainerPlan.Top.BACK_DOWN).lastStep)
+    }
+
     @Test fun pyramidGoesUpThenBackDownAndHolds() {
         val p = TrainerPlan(from = 100, to = 108, step = 4, every = 1, top = TrainerPlan.Top.BACK_DOWN)
         assertEquals(listOf(100, 104, 108, 104, 100, 100), (0..5).map(p::bpmFor))

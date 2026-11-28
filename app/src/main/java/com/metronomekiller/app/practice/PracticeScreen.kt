@@ -57,6 +57,11 @@ import com.metronomekiller.app.metronome.SquareButton
 import com.metronomekiller.app.ui.AppIcons
 import com.metronomekiller.app.ui.rememberTick
 import kotlin.math.abs
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.coroutineScope
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.runtime.rememberUpdatedState
 import kotlin.math.roundToInt
 
 /**
@@ -98,7 +103,7 @@ fun PracticeScreen(practice: PracticeController, metronome: MetronomeController,
         Spacer(Modifier.height(10.dp))
 
         when (tool) {
-            PracticeController.Tool.SPEED -> SpeedTrainer(practice, state.bpm, running == tool, tick)
+            PracticeController.Tool.SPEED -> SpeedTrainer(practice, metronome, state.bpm, running == tool, tick)
             PracticeController.Tool.GAPS -> GapClick(practice, running == tool, tick)
             PracticeController.Tool.TIMING -> TimingCheck(practice, running == tool)
             PracticeController.Tool.LADDER -> SubdivisionLadder(practice, running == tool, tick)
@@ -183,38 +188,58 @@ private fun SetupTile(value: String, label: String, modifier: Modifier, small: B
 // ── Speed trainer ──────────────────────────────────────────────────────────
 
 @Composable
-private fun ColumnScope.SpeedTrainer(practice: PracticeController, bpm: Int, on: Boolean, tick: () -> Unit) {
+private fun ColumnScope.SpeedTrainer(practice: PracticeController, metronome: MetronomeController, bpm: Int, on: Boolean, tick: () -> Unit) {
     val plan by practice.trainer.collectAsStateWithLifecycle()
-    val bar by practice.bar.collectAsStateWithLifecycle()
+    val bar by practice.trainerBar.collectAsStateWithLifecycle()
+    val held by practice.held.collectAsStateWithLifecycle()
     val countingIn by practice.countingIn.collectAsStateWithLifecycle()
     val countIn by practice.countIn.collectAsStateWithLifecycle()
+    val meter = metronome.state.collectAsStateWithLifecycle().value.meter
+    val c = MaterialTheme.colorScheme
+    var typing by remember { mutableStateOf<String?>(null) } // "from" or "to" while its number pad is open
+    // How long one bar lasts at a tempo, the same way the engine counts it
+    // (the last beat of 7/8-style meters can be shorter).
+    val barSeconds = { b: Int -> (meter.beatCount - 1 + meter.lastBeatFraction) * 60.0 / meter.beatsPerMinute(b) }
+    val step = plan.stepOf(bar)
     Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(if (on) "now" else "starts at", style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(if (on) "now" else "starts at", style = MaterialTheme.typography.labelMedium, color = c.onSurfaceVariant)
             Text("${if (on) bpm else plan.from}", fontSize = 52.sp, fontWeight = FontWeight.Bold, lineHeight = 54.sp)
             Text(
                 when {
                     on && countingIn > 0 -> "BPM · count-in $countingIn of $countIn"
-                    on && bar >= 0 -> "BPM · bar ${bar % plan.every + 1} of ${plan.every} at this tempo"
-                    else -> "BPM"
+                    on && held -> "BPM · holding this tempo"
+                    on -> "BPM · step ${minOf(step, plan.lastStep) + 1} of ${plan.lastStep + 1} · bar ${bar % plan.every.coerceAtLeast(1) + 1} of ${plan.every}"
+                    else -> "BPM · ${plan.steps} tempos, ${fmtDuration(plan.secondsToTop(0, barSeconds).roundToInt())} to reach ${plan.to}"
                 },
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall, color = c.onSurfaceVariant,
             )
+            if (on && countingIn == 0 && !held) {
+                val left = plan.secondsToTop(bar, barSeconds).roundToInt()
+                Text(if (left > 0) "${plan.to} BPM in ${fmtDuration(left)}" else "At the top", style = MaterialTheme.typography.bodySmall, color = c.primary)
+            }
         }
         StepGraph(plan, if (on) bar else -1, Modifier.fillMaxWidth().height(64.dp).padding(vertical = 8.dp))
-        Stepper("From", "${plan.from} BPM", tick, { practice.setTrainer(plan.copy(from = (plan.from - 1).coerceAtLeast(MetronomeController.MIN_BPM))) }) {
+        // While it runs: go back a step, hold where you are, or jump ahead.
+        if (on) Row(Modifier.fillMaxWidth().padding(bottom = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            LiveButton("− step", Modifier.weight(1f), enabled = countingIn == 0) { practice.skipStep(-1); tick() }
+            LiveButton(if (held) "Carry on" else "Hold", Modifier.weight(1.3f), selected = held, enabled = countingIn == 0) { practice.setHeld(!held); tick() }
+            LiveButton("+ step", Modifier.weight(1f), enabled = countingIn == 0) { practice.skipStep(1); tick() }
+        }
+        Stepper("From", "${plan.from} BPM", tick, onValue = { typing = "from" },
+            onMinus = { practice.setTrainer(plan.copy(from = (plan.from - 1).coerceAtLeast(MetronomeController.MIN_BPM))) }) {
             practice.setTrainer(plan.copy(from = (plan.from + 1).coerceAtMost(MetronomeController.MAX_BPM)))
         }
-        Stepper("To", "${plan.to} BPM", tick, { practice.setTrainer(plan.copy(to = (plan.to - 1).coerceAtLeast(MetronomeController.MIN_BPM))) }) {
+        Stepper("To", "${plan.to} BPM", tick, onValue = { typing = "to" },
+            onMinus = { practice.setTrainer(plan.copy(to = (plan.to - 1).coerceAtLeast(MetronomeController.MIN_BPM))) }) {
             practice.setTrainer(plan.copy(to = (plan.to + 1).coerceAtMost(MetronomeController.MAX_BPM)))
         }
         Stepper("Step", "${if (plan.to >= plan.from) "+" else "−"}${plan.step} BPM", tick,
-            { practice.setTrainer(plan.copy(step = (plan.step - 1).coerceAtLeast(1))) }) {
+            onMinus = { practice.setTrainer(plan.copy(step = (plan.step - 1).coerceAtLeast(1))) }) {
             practice.setTrainer(plan.copy(step = (plan.step + 1).coerceAtMost(50)))
         }
         Stepper("Every", "${plan.every} bar${if (plan.every > 1) "s" else ""}", tick,
-            { practice.setTrainer(plan.copy(every = (plan.every - 1).coerceAtLeast(1))) }) {
+            onMinus = { practice.setTrainer(plan.copy(every = (plan.every - 1).coerceAtLeast(1))) }) {
             practice.setTrainer(plan.copy(every = (plan.every + 1).coerceAtMost(64)))
         }
         Toggle("At the top", plan.top.label, tick) {
@@ -222,6 +247,23 @@ private fun ColumnScope.SpeedTrainer(practice: PracticeController, bpm: Int, on:
         }
         CountIn(practice, tick)
     }
+    typing?.let { which ->
+        BpmEntry(if (which == "from") plan.from else plan.to, onDismiss = { typing = null }) {
+            practice.setTrainer(if (which == "from") plan.copy(from = it) else plan.copy(to = it)); typing = null
+        }
+    }
+}
+
+/** A wide button for steering the trainer while it plays. */
+@Composable
+private fun LiveButton(text: String, modifier: Modifier, selected: Boolean = false, enabled: Boolean = true, onClick: () -> Unit) {
+    val c = MaterialTheme.colorScheme
+    Text(
+        text, textAlign = TextAlign.Center, style = MaterialTheme.typography.labelLarge,
+        color = when { !enabled -> c.onSurfaceVariant.copy(alpha = 0.5f); selected -> c.onPrimary; else -> c.onSurface },
+        modifier = modifier.clip(RoundedCornerShape(10.dp)).background(if (selected) c.primary else c.surfaceVariant)
+            .clickable(enabled = enabled, onClick = onClick).padding(vertical = 12.dp),
+    )
 }
 
 /** The tempo staircase, with the part you've played drawn in the accent colour. */
@@ -614,9 +656,13 @@ private fun CountIn(practice: PracticeController, tick: () -> Unit) {
     Toggle("Count-in", when (n) { 0 -> "Off"; 1 -> "1 bar"; else -> "2 bars" }, tick) { practice.setCountIn((n + 1) % 3) }
 }
 
-/** A setting row with − and + buttons (each press gives a haptic tick). */
+/**
+ * A setting row with − and + buttons (each press gives a haptic tick). Keep a
+ * button pressed and it repeats, faster the longer you hold. With [onValue],
+ * tapping the number lets you type it instead.
+ */
 @Composable
-private fun Stepper(label: String, value: String, tick: () -> Unit, onMinus: () -> Unit, onPlus: () -> Unit) {
+private fun Stepper(label: String, value: String, tick: () -> Unit, onMinus: () -> Unit, onValue: (() -> Unit)? = null, onPlus: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().padding(vertical = 3.dp).clip(RoundedCornerShape(10.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant).padding(start = 12.dp),
@@ -624,15 +670,42 @@ private fun Stepper(label: String, value: String, tick: () -> Unit, onMinus: () 
     ) {
         Text(label, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(value, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium,
-            textAlign = TextAlign.End, modifier = Modifier.weight(1f).padding(end = 8.dp))
+            textAlign = TextAlign.End,
+            color = if (onValue != null) MaterialTheme.colorScheme.primary else Color.Unspecified,
+            modifier = Modifier.weight(1f).then(if (onValue != null) Modifier.clickable { onValue(); tick() } else Modifier)
+                .padding(end = 8.dp, top = 12.dp, bottom = 12.dp))
         StepButton("−") { onMinus(); tick() }
         StepButton("+") { onPlus(); tick() }
     }
 }
 
+/**
+ * LEARN: pointerInput gets the raw finger down/up. We fire once on touch,
+ * wait a moment, then keep firing (speeding up) until the finger lifts.
+ * rememberUpdatedState makes sure the repeating loop always calls the newest
+ * onClick (each press changes the plan, so the old lambda would be stale).
+ */
 @Composable
 private fun StepButton(text: String, onClick: () -> Unit) {
-    Box(Modifier.size(46.dp).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
+    val latest by rememberUpdatedState(onClick)
+    Box(
+        Modifier.size(46.dp).pointerInput(Unit) {
+            coroutineScope {
+                awaitEachGesture {
+                    awaitFirstDown()
+                    val repeat = launch {
+                        latest()
+                        delay(400)
+                        var wait = 120L
+                        while (true) { latest(); delay(wait); wait = maxOf(30L, wait - 10) }
+                    }
+                    waitForUpOrCancellation()
+                    repeat.cancel()
+                }
+            }
+        },
+        contentAlignment = Alignment.Center,
+    ) {
         Text(text, fontSize = 22.sp, color = MaterialTheme.colorScheme.primary)
     }
 }

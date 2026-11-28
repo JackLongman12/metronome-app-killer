@@ -41,6 +41,23 @@ data class TrainerPlan(val from: Int = 90, val to: Int = 130, val step: Int = 4,
         val bpm = from + dir * idx * step.coerceAtLeast(1)
         return if (dir > 0) minOf(bpm, to) else maxOf(bpm, to)
     }
+
+    /** Which tempo step bar [bar] is on (0 = [from]), before Hold/Restart/Back-down folding. */
+    fun stepOf(bar: Int): Int = bar.coerceAtLeast(0) / every.coerceAtLeast(1)
+
+    /** The last step you can skip to: the top, or back at [from] for the pyramid. */
+    val lastStep: Int get() = if (top == Top.BACK_DOWN) 2 * (steps - 1) else steps - 1
+
+    /**
+     * Seconds from bar [bar] until [to] is first reached, given how long one bar
+     * lasts at a tempo ([barSeconds]). 0 once you're there.
+     */
+    fun secondsToTop(bar: Int, barSeconds: (Int) -> Double): Double {
+        val topBar = every.coerceAtLeast(1) * (steps - 1)
+        var sum = 0.0
+        for (b in bar.coerceAtLeast(0) until topBar) sum += barSeconds(bpmFor(b))
+        return sum
+    }
 }
 
 /**
@@ -137,6 +154,15 @@ class PracticeController(context: Context, private val metronome: MetronomeContr
     /** Bars since you pressed play (0 = first bar). */
     private val _bar = MutableStateFlow(-1)
     val bar: StateFlow<Int> = _bar
+    /**
+     * Speed trainer: which bar of the plan we're on. Usually the same as [bar],
+     * but it stops counting while you Hold and jumps when you skip a step.
+     */
+    private val _trainerBar = MutableStateFlow(0)
+    val trainerBar: StateFlow<Int> = _trainerBar
+    /** Speed trainer: true while you're holding the current tempo. */
+    private val _held = MutableStateFlow(false)
+    val held: StateFlow<Boolean> = _held
     /** Gap click: (silent?, which bar of that stretch, how long the stretch is). */
     private val _gapState = MutableStateFlow(Triple(false, 0, 0))
     val gapState: StateFlow<Triple<Boolean, Int, Int>> = _gapState
@@ -230,6 +256,8 @@ class PracticeController(context: Context, private val metronome: MetronomeContr
         _runStartedAt.value = System.currentTimeMillis()
         topBpm = metronome.state.value.bpm
         _bar.value = -1 - lead
+        _trainerBar.value = 0
+        _held.value = false
         _countingIn.value = 0
         follower = scope.launch {
             var counted = -1                         // bars since play, count-in included
@@ -239,12 +267,15 @@ class PracticeController(context: Context, private val metronome: MetronomeContr
                 val bar = counted - lead             // negative while counting in
                 _bar.value = bar
                 _countingIn.value = if (bar < 0) counted + 1 else 0
-                if (t == Tool.SPEED) {
+                if (t == Tool.SPEED) synchronized(this) {
+                    // LEARN: the plan's own bar counter only moves on when you're not
+                    // holding, so Hold just "pauses the staircase" while the click goes on.
+                    if (bar >= 1 && !_held.value) _trainerBar.value++
                     val plan = _trainer.value
-                    val now = plan.bpmFor(bar.coerceAtLeast(0))
+                    val now = plan.bpmFor(_trainerBar.value)
                     if (metronome.state.value.bpm != now) metronome.setBpm(now) // engine already switched; this updates the screen
-                    val next = plan.bpmFor((bar + 1).coerceAtLeast(0))
-                    if (next != now) NativeEngine.nSetTempoAtNextBar(metronome.state.value.meter.beatsPerMinute(next))
+                    // not during the count-in: the first real bar must stay at "From"
+                    if (bar >= 0) queueNextTempo() else NativeEngine.nSetTempoAtNextBar(-1.0)
                     topBpm = maxOf(topBpm, now)
                 }
                 if (t == Tool.LADDER) {
@@ -264,6 +295,38 @@ class PracticeController(context: Context, private val metronome: MetronomeContr
             }
         }
         metronome.start()
+    }
+
+    /**
+     * Tell the engine the tempo for the coming bar, so it switches exactly on the "1".
+     * Nothing changes while holding (and -1 clears an earlier request).
+     */
+    private fun queueNextTempo() {
+        val plan = _trainer.value
+        val now = plan.bpmFor(_trainerBar.value)
+        val next = if (_held.value) now else plan.bpmFor(_trainerBar.value + 1)
+        NativeEngine.nSetTempoAtNextBar(if (next != now) metronome.state.value.meter.beatsPerMinute(next) else -1.0)
+    }
+
+    /** Speed trainer: stay on the current tempo (true) or carry on climbing (false). */
+    @Synchronized
+    fun setHeld(on: Boolean) {
+        if (_running.value != Tool.SPEED) return
+        _held.value = on
+        queueNextTempo()
+    }
+
+    /** Speed trainer: jump one tempo step up (+1) or back (−1) right away. */
+    @Synchronized
+    fun skipStep(by: Int) {
+        if (_running.value != Tool.SPEED || _bar.value < 0) return // not during the count-in
+        val plan = _trainer.value
+        val step = (plan.stepOf(_trainerBar.value) + by).coerceIn(0, plan.lastStep)
+        _trainerBar.value = step * plan.every.coerceAtLeast(1)
+        val now = plan.bpmFor(_trainerBar.value)
+        metronome.setBpm(now)
+        topBpm = maxOf(topBpm, now)
+        queueNextTempo()
     }
 
     @Synchronized // start/stop come from the screen, cleanUp also from a background watcher
@@ -293,6 +356,7 @@ class PracticeController(context: Context, private val metronome: MetronomeContr
         NativeEngine.nSetRandomMute(0)
         NativeEngine.nSetTempoAtNextBar(-1.0)
         _running.value = null
+        _held.value = false
         _gapState.value = Triple(false, 0, 0)
         _countingIn.value = 0
     }

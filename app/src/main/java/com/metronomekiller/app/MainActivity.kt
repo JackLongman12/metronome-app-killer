@@ -178,7 +178,6 @@ class MainActivity : ComponentActivity() {
         val snackbar = remember { SnackbarHostState() }
         val setlists = App.from(this).setlists
         val scope = rememberCoroutineScope()
-        val say: (String) -> Unit = { msg -> scope.launch { snackbar.showSnackbar(msg) } }
 
         // Keep the screen on while the click is running.
         val playing = metronome.state.collectAsStateWithLifecycle().value.playing
@@ -251,7 +250,10 @@ class MainActivity : ComponentActivity() {
                 } else when (tab) {
                     Tab.SETTINGS -> SettingsScreen(updates, metronome,
                         onOpenCalibration = { screen = Screen.CALIBRATION }, onBack = null)
-                    Tab.METRONOME -> MetronomeScreen(metronome, onTogglePlay = togglePlay, onComingSoon = say)
+                    Tab.METRONOME -> MetronomeScreen(metronome, onTogglePlay = togglePlay, onOpenTrainer = {
+                        App.from(this@MainActivity).practice.setTool(com.metronomekiller.app.practice.PracticeController.Tool.SPEED)
+                        tab = Tab.PRACTICE
+                    })
                     Tab.PRACTICE -> com.metronomekiller.app.practice.PracticeScreen(
                         App.from(this@MainActivity).practice, metronome, onPlay = askNotifications,
                     )

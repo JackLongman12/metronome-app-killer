@@ -18,7 +18,7 @@ Hobby project, GPL-3.0, not on the Play Store. Install it from [Releases](../../
 - Setlists: saved metronome settings in playing order, with quick Next / Previous on stage.
 - A Mac version with the same engine, plus a menu bar metronome, MIDI clock and pedals: see [mac/README.md](mac/README.md).
 
-The Songs feature (click tracks from YouTube, Spotify or your own songs) was removed in Android build 28 and Mac build 13. Updating to those builds deletes everything it downloaded.
+The Songs feature (click tracks from YouTube, Spotify or your own songs) was removed in Android build 28 and Mac build 14. Updating to those builds deletes everything it downloaded.
 
 ## How it's built
 

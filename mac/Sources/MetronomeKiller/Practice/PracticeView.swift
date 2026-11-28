@@ -67,17 +67,45 @@ private struct SpeedTrainerView: View {
 
     var body: some View {
         let plan = p.saved.trainer
+        let meter = m.settings.meter
+        // How long one bar lasts at a tempo, the way the engine counts it
+        // (the last beat of 7/8-style meters can be shorter).
+        let barSeconds = { (b: Int) in (Double(meter.beatCount) - 1 + meter.lastBeatFraction) * 60 / meter.beatsPerMinute(b) }
+        let step = plan.step(ofBar: p.trainerBar)
+        let live = on && p.countingIn == 0
         VStack(spacing: 6) {
             VStack(spacing: 0) {
                 Text(on ? "now" : "starts at").font(.caption).foregroundStyle(.secondary)
                 Text("\(on ? m.settings.bpm : plan.from)").font(.system(size: 52, weight: .semibold, design: .rounded)).monospacedDigit()
-                Text(on && p.countingIn > 0 ? "BPM · count-in \(p.countingIn) of \(p.saved.countIn)"
-                     : on && p.bar >= 0 ? "BPM · bar \(p.bar % max(plan.every, 1) + 1) of \(plan.every) at this tempo" : "BPM")
-                    .font(.caption).foregroundStyle(.secondary)
+                Group {
+                    if on && p.countingIn > 0 { Text("BPM · count-in \(p.countingIn) of \(p.saved.countIn)") }
+                    else if on && p.held { Text("BPM · holding this tempo") }
+                    else if on { Text("BPM · step \(min(step, plan.lastStep) + 1) of \(plan.lastStep + 1) · bar \(p.trainerBar % max(plan.every, 1) + 1) of \(plan.every)") }
+                    else { Text("BPM · \(plan.steps) tempos, \(fmtDuration(Int(plan.secondsToTop(fromBar: 0, barSeconds: barSeconds).rounded()))) to reach \(plan.to)") }
+                }
+                .font(.caption).foregroundStyle(.secondary)
+                if live && !p.held {
+                    let left = Int(plan.secondsToTop(fromBar: p.trainerBar, barSeconds: barSeconds).rounded())
+                    Text(left > 0 ? "\(plan.to) BPM in \(fmtDuration(left))" : "At the top").font(.caption).foregroundStyle(Color.mkTealDark)
+                }
             }
-            StepGraph(plan: plan, bar: on ? p.bar : -1).frame(height: 64).padding(.vertical, 6)
-            StepRow("From", "\(plan.from) BPM") { var x = plan; x.from += $0; p.setTrainer(x) }
-            StepRow("To", "\(plan.to) BPM") { var x = plan; x.to += $0; p.setTrainer(x) }
+            StepGraph(plan: plan, bar: on ? p.trainerBar : -1).frame(height: 64).padding(.vertical, 6)
+            // While it runs: go back a step, hold where you are, or jump ahead (also ← H → on the keyboard).
+            if on {
+                HStack(spacing: 8) {
+                    Button { p.skipStep(-1) } label: { Text("− step").frame(maxWidth: .infinity) }
+                        .keyboardShortcut(.leftArrow, modifiers: [])
+                    Button { p.setHeld(!p.held) } label: { Text(p.held ? "Carry on" : "Hold").frame(maxWidth: .infinity) }
+                        .tint(p.held ? .mkTealDark : nil).buttonStyle(.borderedProminent)
+                        .keyboardShortcut("h", modifiers: [])
+                    Button { p.skipStep(1) } label: { Text("+ step").frame(maxWidth: .infinity) }
+                        .keyboardShortcut(.rightArrow, modifiers: [])
+                }
+                .controlSize(.large).disabled(!live)
+                .help("← and → skip a step, H holds the tempo")
+            }
+            StepRow("From", "\(plan.from) BPM", typed: plan.from, onType: { var x = plan; x.from = $0; p.setTrainer(x) }) { var x = plan; x.from += $0; p.setTrainer(x) }
+            StepRow("To", "\(plan.to) BPM", typed: plan.to, onType: { var x = plan; x.to = $0; p.setTrainer(x) }) { var x = plan; x.to += $0; p.setTrainer(x) }
             StepRow("Step", "\(plan.to >= plan.from ? "+" : "−")\(plan.step) BPM") { var x = plan; x.step += $0; p.setTrainer(x) }
             StepRow("Every", bars(plan.every)) { var x = plan; x.every += $0; p.setTrainer(x) }
             ChoiceRow("At the top", plan.top.label) {
@@ -439,20 +467,46 @@ private struct HistorySheet: View {
 
 private func bars(_ n: Int) -> String { "\(n) bar\(n == 1 ? "" : "s")" }
 
-/** A setting row with − and + buttons. change gets −1 or +1. */
+/**
+ * A setting row with − and + buttons. change gets −1 or +1 (±10 with Option
+ * held). With [onType], the number is a box you can click and type into.
+ */
 private struct StepRow: View {
     let label: String, value: String
+    var typed: Int? = nil
+    var onType: ((Int) -> Void)? = nil
     let change: (Int) -> Void
-    init(_ label: String, _ value: String, change: @escaping (Int) -> Void) { self.label = label; self.value = value; self.change = change }
+    @State private var text = ""
+    @FocusState private var typing: Bool
+    init(_ label: String, _ value: String, typed: Int? = nil, onType: ((Int) -> Void)? = nil, change: @escaping (Int) -> Void) {
+        self.label = label; self.value = value; self.typed = typed; self.onType = onType; self.change = change
+    }
+
+    /** LEARN: NSEvent.modifierFlags is the keys held down right now, so Option-click jumps by 10. */
+    private var by: Int { NSEvent.modifierFlags.contains(.option) ? 10 : 1 }
 
     var body: some View {
         HStack {
             Text(label).foregroundStyle(.secondary)
             Spacer()
-            Text(value).fontWeight(.medium).monospacedDigit()
-            Button { change(-1) } label: { Image(systemName: "minus").frame(width: 22, height: 18) }
-            Button { change(1) } label: { Image(systemName: "plus").frame(width: 22, height: 18) }
+            if let typed, let onType {
+                HStack(spacing: 4) {
+                    TextField("", text: $text)
+                        .textFieldStyle(.roundedBorder).multilineTextAlignment(.trailing).monospacedDigit()
+                        .frame(width: 56).focused($typing)
+                        .onSubmit { if let n = Int(text) { onType(n) }; text = "\(typed)" }
+                        .onChange(of: typing) { on in if !on, let n = Int(text), n != typed { onType(n) } }
+                        .onAppear { text = "\(typed)" }
+                        .onChange(of: typed) { v in if !typing { text = "\(v)" } }
+                    Text("BPM").foregroundStyle(.secondary)
+                }
+            } else {
+                Text(value).fontWeight(.medium).monospacedDigit()
+            }
+            Button { change(-by) } label: { Image(systemName: "minus").frame(width: 22, height: 18) }
+            Button { change(by) } label: { Image(systemName: "plus").frame(width: 22, height: 18) }
         }
+        .help("Option-click − or + to change by 10")
         .padding(.horizontal, 12).padding(.vertical, 6)
         .background(RoundedRectangle(cornerRadius: 10).fill(Color.secondary.opacity(0.08)))
     }

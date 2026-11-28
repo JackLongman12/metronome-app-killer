@@ -37,6 +37,21 @@ struct TrainerPlan: Codable, Equatable {
         let bpm = from + dir * idx * max(step, 1)
         return dir > 0 ? min(bpm, to) : max(bpm, to)
     }
+
+    /** Which tempo step bar [bar] is on (0 = [from]), before Hold/Restart/Back-down folding. */
+    func step(ofBar bar: Int) -> Int { max(bar, 0) / max(every, 1) }
+
+    /** The last step you can skip to: the top, or back at [from] for the pyramid. */
+    var lastStep: Int { top == .backDown ? 2 * (steps - 1) : steps - 1 }
+
+    /** Seconds from bar [bar] until [to] is first reached; [barSeconds] = one bar's length at a tempo. */
+    func secondsToTop(fromBar bar: Int, barSeconds: (Int) -> Double) -> Double {
+        let topBar = max(every, 1) * (steps - 1)
+        var sum = 0.0
+        var b = max(bar, 0)
+        while b < topBar { sum += barSeconds(self.bpm(forBar: b)); b += 1 }
+        return sum
+    }
 }
 
 /** Gap click: [on] bars of click, then [off] silent ones, repeating. */
@@ -152,6 +167,13 @@ final class Practice: ObservableObject {
     @Published private(set) var bar = -1
     /** While counting in: which count-in bar (1-based), else 0. */
     @Published private(set) var countingIn = 0
+    /**
+     * Speed trainer: which bar of the plan we're on. Usually the same as [bar],
+     * but it stops counting while you Hold and jumps when you skip a step.
+     */
+    @Published private(set) var trainerBar = 0
+    /** Speed trainer: true while you're holding the current tempo. */
+    @Published private(set) var held = false
     /** Gap click: silent now?, which bar of that stretch, how long the stretch is. */
     @Published private(set) var gapState = (silent: false, pos: 0, len: 0)
     @Published private(set) var taps: [Tap] = []
@@ -273,6 +295,8 @@ final class Practice: ObservableObject {
         runStartedAt = Date()
         topBpm = metronome.settings.bpm
         bar = -1 - lead
+        trainerBar = 0
+        held = false
         counted = -1
         countingIn = 0
         metronome.onBar = { [weak self] in self?.onBar() }
@@ -284,6 +308,33 @@ final class Practice: ObservableObject {
         cleanUp()
     }
 
+    /** Tell the engine the coming bar's tempo, so it switches exactly on the "1" (none while holding). */
+    private func queueNextTempo() {
+        let plan = saved.trainer
+        let now = plan.bpm(forBar: trainerBar)
+        let next = held ? now : plan.bpm(forBar: trainerBar + 1)
+        mk_set_tempo_at_next_bar(next != now ? metronome.settings.meter.beatsPerMinute(next) : -1)
+    }
+
+    /** Speed trainer: stay on the current tempo (true) or carry on climbing (false). */
+    func setHeld(_ on: Bool) {
+        guard running == .speed else { return }
+        held = on
+        queueNextTempo()
+    }
+
+    /** Speed trainer: jump one tempo step up (+1) or back (−1) right away. */
+    func skipStep(_ by: Int) {
+        guard running == .speed, bar >= 0 else { return } // not during the count-in
+        let plan = saved.trainer
+        let step = (plan.step(ofBar: trainerBar) + by).clamped(0, plan.lastStep)
+        trainerBar = step * max(plan.every, 1)
+        let now = plan.bpm(forBar: trainerBar)
+        metronome.setBpm(now)
+        topBpm = max(topBpm, now)
+        queueNextTempo()
+    }
+
     /** Each new bar's "1", as heard. */
     private func onBar() {
         guard let t = running else { return }
@@ -293,11 +344,13 @@ final class Practice: ObservableObject {
         countingIn = b < 0 ? counted + 1 : 0
         switch t {
         case .speed:
-            let plan = saved.trainer
-            let now = plan.bpm(forBar: max(b, 0))
+            // LEARN: the plan's own bar counter only moves on when you're not
+            // holding, so Hold just "pauses the staircase" while the click goes on.
+            if b >= 1 && !held { trainerBar += 1 }
+            let now = saved.trainer.bpm(forBar: trainerBar)
             if metronome.settings.bpm != now { metronome.setBpm(now) } // the engine already switched; this updates the screen
-            let next = plan.bpm(forBar: max(b + 1, 0))
-            if next != now { mk_set_tempo_at_next_bar(metronome.settings.meter.beatsPerMinute(next)) }
+            // not during the count-in: the first real bar must stay at "From"
+            if b >= 0 { queueNextTempo() } else { mk_set_tempo_at_next_bar(-1) }
             topBpm = max(topBpm, now)
         case .ladder:
             let plan = saved.ladder
@@ -339,6 +392,7 @@ final class Practice: ObservableObject {
         mk_set_random_mute(0)
         mk_set_tempo_at_next_bar(-1)
         running = nil
+        held = false
         gapCounter = nil
         gapState = (false, 0, 0)
         countingIn = 0

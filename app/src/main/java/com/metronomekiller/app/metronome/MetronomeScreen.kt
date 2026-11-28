@@ -91,7 +91,7 @@ import kotlin.math.roundToInt
 fun MetronomeScreen(
     controller: MetronomeController,
     onTogglePlay: () -> Unit,
-    onComingSoon: (String) -> Unit,
+    onOpenTrainer: () -> Unit,
 ) {
     val s by controller.state.collectAsStateWithLifecycle()
     val current by controller.currentBeat.collectAsStateWithLifecycle()
@@ -199,7 +199,7 @@ fun MetronomeScreen(
     if (more) MoreSheet(
         controller = controller,
         onPickSound = { more = false; pickSound = true },
-        onTrainer = { more = false; onComingSoon("Speed trainer is coming in a later build") },
+        onTrainer = { more = false; onOpenTrainer() },
         onDismiss = { more = false },
     )
 }
@@ -284,7 +284,7 @@ private fun MoreSheet(controller: MetronomeController, onPickSound: () -> Unit, 
             SheetToggle("Flash the screen", flash, controller.prefs::setFlash)
             SheetToggle("Vibrate on the beat", vibrate, controller.prefs::setVibrate)
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            SheetRow("Speed trainer", "Coming soon", onTrainer)
+            SheetRow("Speed trainer", "Open in Practice", onTrainer)
         }
     }
 }
