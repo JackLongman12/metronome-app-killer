@@ -66,6 +66,12 @@ final class AudioOutput: ObservableObject {
         mk_set_output(d?.id ?? 0, Int32(d == nil ? 0 : min(channel, max((d?.channels ?? 2) - 1, 0))))
     }
 
+    struct ChannelPair: Identifiable, Hashable {
+        let first: Int
+        let label: String
+        var id: Int { first }
+    }
+
     /** "Channels 1–2", "Channels 3–4"… for a device with [n] outputs. */
     static func pairs(_ n: Int) -> [ChannelPair] {
         guard n > 2 else { return [ChannelPair(first: 0, label: n == 1 ? "Channel 1" : "Channels 1–2")] }
