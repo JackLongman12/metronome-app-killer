@@ -64,7 +64,7 @@ struct MetronomeKillerApp: App {
             }
         }
 
-        // ⌘, : audio output, MIDI, menu bar
+        // ⌘, : audio output, beat flash, menu bar
         Settings {
             SettingsView()
                 .environmentObject(metronome)
@@ -87,7 +87,6 @@ struct MetronomeKillerApp: App {
         app.connect(metronome, practice, setlists)
         _ = AudioOutput.shared               // point the engine at the chosen output
         NowPlaying.install(app)
-        if Midi.shared.everUsed { Midi.shared.start(app) }   // no MIDI work at all until you use it
         KeyShortcuts.install(app)
     }
 }

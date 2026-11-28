@@ -20,12 +20,12 @@ After that it opens normally. It checks GitHub for a new version every time it o
 
 ## What's here so far
 
-- The metronome: odd, decimal and irrational time signatures, accents, subdivisions, 14 sounds (6 recorded), tap tempo, and keyboard shortcuts (Space, ↑/↓, Shift+↑/↓, T).
+- The metronome: odd, decimal and irrational time signatures, accents, subdivisions, 20 sounds (12 recorded), tap tempo, and keyboard shortcuts (Space, ↑/↓, Shift+↑/↓, T).
 - Practice: speed trainer, gap click (with timing check), timing check, subdivision ladder and polyrhythm, plus a daily timer and history. On the tap pad, click or press T.
-- Setlists: metronome settings in playing order. Next / Previous from the strip at the top, Page Down / Page Up, ⌘] / ⌘[, a MIDI pedal, or the ⏭ / ⏮ media keys.
+- Setlists: metronome settings in playing order. Next / Previous from the strip at the top, Page Down / Page Up, ⌘] / ⌘[, or the ⏭ / ⏮ media keys.
 - Mac-only:
-  - **Menu bar metronome**: start/stop, tempo and tap from the menu bar. It can keep running there with the window closed (Settings → Menu bar).
-  - **MIDI** (Settings → MIDI): send MIDI clock so Logic, Ableton or GarageBand follow the metronome; follow another app's clock and start/stop; and Learn any pedal, pad or key to start/stop, tap, change tempo or step through a setlist.
+  - **Beat flash** (Settings → General): the window flashes on each beat, or only on accents.
+  - **Menu bar metronome**: start/stop, tempo and tap from the menu bar. It can keep running there with the window closed (Settings → General).
   - **Audio output** (Settings → Audio): play through a chosen device, and put the click on any pair of an interface's outputs (e.g. 3–4 for headphones only).
   - **Media keys, AirPods and Control Center**: play/pause, and ⏭ / ⏮ for the next setlist item.
 - Self-update and clean uninstall.

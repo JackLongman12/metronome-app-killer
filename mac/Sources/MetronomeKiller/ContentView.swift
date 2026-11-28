@@ -40,6 +40,7 @@ struct ContentView: View {
                 case .setlists: SetlistsView()
                 }
             }
+            .overlay { BeatFlash().allowsHitTesting(false) }
         }
     }
 }
@@ -80,5 +81,39 @@ struct UpdateBanner: View {
             .padding(.vertical, 8)
             .background(Color.mkTeal.opacity(0.12))
             .overlay(alignment: .bottom) { Divider() }
+    }
+}
+
+/**
+ * The optional full-window flash on each beat (Settings → General), like the phone's.
+ * A flat tint that fades in 0.16 s: brighter and teal on accents, no glow.
+ *
+ * LEARN: we jump the opacity up with no animation, then on the next turn of the
+ * main loop animate it back to 0. Done in one go, SwiftUI would merge the two
+ * changes and you'd see nothing.
+ */
+struct BeatFlash: View {
+    @EnvironmentObject private var m: Metronome
+    @AppStorage("flash") private var on = false
+    @AppStorage("flashAccentsOnly") private var accentsOnly = false
+    @State private var level = 0.0
+    @State private var accent = false
+
+    var body: some View {
+        (accent ? Color.mkTeal : Color.primary)
+            .opacity(level)
+            .ignoresSafeArea()
+            .onChange(of: m.beatCount) { _ in
+                guard on, m.playing else { return }
+                let beats = m.settings.beats
+                guard beats.indices.contains(m.currentBeat) else { return }
+                let b = beats[m.currentBeat]
+                if b == .mute { return }
+                let isAccent = b == .accent || b == .strong
+                if accentsOnly && !isAccent { return }
+                accent = isAccent
+                level = isAccent ? 0.35 : 0.14
+                DispatchQueue.main.async { withAnimation(.easeOut(duration: 0.16)) { level = 0 } }
+            }
     }
 }

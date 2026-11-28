@@ -17,6 +17,8 @@ final class Metronome: ObservableObject {
     @Published private(set) var playing = false
     /** Index of the beat being heard right now, -1 when stopped. */
     @Published private(set) var currentBeat = -1
+    /** Goes up by one on every beat you hear (the beat flash watches it). */
+    @Published private(set) var beatCount = 0
     @Published private(set) var latencyMs: Double = 0
 
     /**
@@ -178,6 +180,7 @@ final class Metronome: ObservableObject {
                 // A new beat that is a "1": tell whoever listens (Practice).
                 if seq != self.lastSeq {
                     self.lastSeq = seq
+                    self.beatCount &+= 1
                     if index == 0 { self.onBar?() }
                 }
             }

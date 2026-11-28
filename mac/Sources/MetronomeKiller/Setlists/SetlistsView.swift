@@ -29,7 +29,7 @@ private struct SetlistList: View {
                 Spacer()
                 Button("New setlist") { naming = true }.buttonStyle(.borderedProminent).tint(.mkTealDark)
             }
-            Text("Saved metronome settings, in playing order. On stage, Next (or Page Down, ⌘], a MIDI pedal) jumps straight to the next one.")
+            Text("Saved metronome settings, in playing order. On stage, Next (or Page Down, ⌘]) jumps straight to the next one.")
                 .font(.callout).foregroundStyle(.secondary)
             if store.lists.isEmpty {
                 VStack(spacing: 6) {
@@ -212,7 +212,7 @@ struct SetlistStrip: View {
                 if let next {
                     Button { app.stepSetlist(1) } label: { Text("Next: \(next.name)").lineLimit(1) }
                         .buttonStyle(.borderedProminent).tint(.mkTealDark)
-                        .help("Page Down, ⌘] or a MIDI pedal does this too")
+                        .help("Page Down or ⌘] does this too")
                 } else {
                     Text("Last one").font(.caption).foregroundStyle(.secondary)
                 }

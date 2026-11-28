@@ -61,19 +61,6 @@ uint32_t mk_default_output(void);
 /** device 0 = follow the Mac's default output. firstChannel 0 = channels 1-2, 2 = 3-4... */
 void mk_set_output(uint32_t device, int firstChannel);
 
-// ── MIDI (Midi.cpp) ──
-/** Starts CoreMIDI once and creates the "Metronome Killer" MIDI source. */
-bool mk_midi_open(void);
-/** Send MIDI clock, Start and Stop while the metronome plays. perBeat = clock ticks per beat (24 for x/4). */
-void mk_midi_send_clock(bool on, double perBeat);
-/** Every incoming MIDI message except clock ticks: status, data1, data2, time in ns. Called on a MIDI thread. */
-typedef void (*mk_midi_callback)(void* ctx, uint8_t status, uint8_t d1, uint8_t d2, int64_t ns);
-void mk_midi_set_input(mk_midi_callback cb, void* ctx);
-/** How many MIDI sources (keyboards, pedals, apps) we're listening to. */
-int mk_midi_source_count(void);
-/** Tempo of the MIDI clock coming in, in quarter notes per minute; 0 if none. */
-double mk_midi_incoming_bpm(void);
-
 #ifdef __cplusplus
 }
 #endif

@@ -16,7 +16,7 @@ Hobby project, GPL-3.0, not on the Play Store. Install it from [Releases](../../
 - The metronome: odd, decimal and irrational time signatures, accents, subdivisions, recorded and synthesised sounds, tap tempo, flash and vibration, and a Bluetooth delay calibration.
 - Practice: speed trainer, gap click, timing check, subdivision ladder, polyrhythm, and a daily practice timer.
 - Setlists: saved metronome settings in playing order, with quick Next / Previous on stage.
-- A Mac version with the same engine, plus a menu bar metronome, MIDI clock and pedals: see [mac/README.md](mac/README.md).
+- A Mac version with the same engine, plus a menu bar metronome and a choice of audio output: see [mac/README.md](mac/README.md).
 
 The Songs feature (click tracks from YouTube, Spotify or your own songs) was removed in Android build 28 and Mac build 14. Updating to those builds deletes everything it downloaded.
 

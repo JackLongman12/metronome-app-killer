@@ -74,7 +74,7 @@ public:
      */
     void setOutput(uint32_t device, int firstChannel);
 
-    // For the MIDI clock (Midi.cpp): the newest beat made so far, and when it'll be heard.
+    // The newest beat made so far, and when it'll be heard.
     bool newestBeat(int64_t* count, int64_t* ns);
     double beatRate() const { return bpm_.load(); }
     bool clicking() const { return running_.load() && clicksEnabled_.load(); }
@@ -170,5 +170,5 @@ private:
     std::atomic<int64_t> ringCount_{0};
 };
 
-/** The one engine the whole app shares (MIDI clock reads it too). */
+/** The one engine the whole app shares (the output picker reaches it through mk_set_output). */
 ClickEngine* mk_engine();

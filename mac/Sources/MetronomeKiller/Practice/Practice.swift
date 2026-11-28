@@ -198,7 +198,7 @@ final class Practice: ObservableObject {
         self.metronome = metronome
         saved = (try? JSONDecoder().decode(Saved.self, from: Data(contentsOf: Self.savedFile))) ?? Saved()
         history = (try? JSONDecoder().decode([LogEntry].self, from: Data(contentsOf: Self.logFile))) ?? []
-        // If the metronome stops from anywhere (Space, the menu bar, MIDI), practice stops too.
+        // If the metronome stops from anywhere (Space, the menu bar, media keys), practice stops too.
         // LEARN: the check runs a moment later, so a stop that start() itself makes
         // (stop the old run, start the new one) is never mistaken for "you pressed Stop".
         watch = metronome.$playing.dropFirst().sink { [weak self] playing in
