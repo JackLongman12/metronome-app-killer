@@ -28,6 +28,7 @@ enum BeatState: Int32, Codable, CaseIterable {
 enum ClickSound: Int, Codable, CaseIterable, Identifiable {
     case click, woodblock, beep, clave, cowbell, hihat, rimshot, kickHat
     case sideStick, realCowbell, rideBell, realHihat, realKickHat, realRimshot
+    case realWoodblock, realClaves, agogo, logDrum, triangle, clap
 
     var id: Int { rawValue }
     var recorded: Bool { rawValue >= ClickSound.sideStick.rawValue }
@@ -47,6 +48,12 @@ enum ClickSound: Int, Codable, CaseIterable, Identifiable {
         case .realHihat: "Real hi-hat"
         case .realKickHat: "Real kick and hat"
         case .realRimshot: "Real rimshot"
+        case .realWoodblock: "Real woodblock"
+        case .realClaves: "Real claves"
+        case .agogo: "Agogo bells"
+        case .logDrum: "Log drum"
+        case .triangle: "Triangle"
+        case .clap: "Hand clap"
         }
     }
 }

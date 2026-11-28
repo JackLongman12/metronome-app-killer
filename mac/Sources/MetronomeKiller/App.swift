@@ -119,6 +119,12 @@ enum KeyShortcuts {
             case 125: m.nudge(shift ? -10 : -1)                                // ↓
             case 121: if app.setlistActive { app.stepSetlist(1) } else { return e }    // Page Down
             case 116: if app.setlistActive { app.stepSetlist(-1) } else { return e }   // Page Up
+            // Speed trainer, while it plays on the Practice page: ← → skip a step, H holds.
+            // (Here rather than as button shortcuts, so typing in a box isn't affected.)
+            case 123, 124, 4:
+                guard app.section == .practice, let p = app.practice, p.running == .speed else { return e }
+                if e.isARepeat { return nil }
+                if e.keyCode == 4 { p.setHeld(!p.held) } else { p.skipStep(e.keyCode == 124 ? 1 : -1) }
             case 17:                                                           // T
                 if e.isARepeat { return nil }
                 if app.section == .practice, let p = app.practice, p.tapsWanted {

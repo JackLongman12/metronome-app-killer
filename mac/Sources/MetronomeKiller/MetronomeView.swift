@@ -5,6 +5,9 @@ struct MetronomeView: View {
     @EnvironmentObject private var m: Metronome
     @State private var showMeter = false
     @State private var showSound = false
+    @State private var typingBpm = false
+    @State private var typedBpm = ""
+    @FocusState private var bpmFocused: Bool
 
     var body: some View {
         let s = m.settings
@@ -18,6 +21,10 @@ struct MetronomeView: View {
                     Text("\(s.bpm)")
                         .font(.system(size: 72, weight: .medium, design: .rounded))
                         .monospacedDigit()
+                        .contentShape(Rectangle())
+                        .onTapGesture { typedBpm = "\(s.bpm)"; typingBpm = true }
+                        .help("Click to type a tempo")
+                        .popover(isPresented: $typingBpm, arrowEdge: .bottom) { bpmEntry }
                     Text("BPM · \(MetronomeSettings.tempoName(s.bpm))").foregroundStyle(.secondary)
                 }
                 .frame(minWidth: 150)
@@ -66,15 +73,28 @@ struct MetronomeView: View {
                 .buttonStyle(.borderedProminent)
                 .tint(.mkTealDark)
             }
-
-            if m.latencyMs > 0 {
-                Text(String(format: "Sound reaches the speakers %.1f ms after each beat is made", m.latencyMs))
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            }
         }
         .padding(28)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /**
+     * The little box that opens when you click the BPM. Return sets it, Escape closes.
+     * LEARN: @FocusState lets us put the cursor in the box as soon as it opens.
+     */
+    private var bpmEntry: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            TextField("BPM", text: $typedBpm)
+                .textFieldStyle(.roundedBorder).frame(width: 110).monospacedDigit()
+                .focused($bpmFocused)
+                .onSubmit {
+                    if let n = Int(typedBpm.filter(\.isNumber)) { m.setBpm(n) }
+                    typingBpm = false
+                }
+            Text("\(MetronomeSettings.minBpm)–\(MetronomeSettings.maxBpm) BPM").font(.caption).foregroundStyle(.secondary)
+        }
+        .padding(12)
+        .onAppear { bpmFocused = true }
     }
 }
 

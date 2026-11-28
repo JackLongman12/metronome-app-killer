@@ -343,20 +343,3 @@ private fun ComicTabs(selected: Tab, onSelect: (Tab) -> Unit) {
         }
     }
 }
-
-@Composable
-private fun EmptyState(title: String, body: String, action: String?, onAction: () -> Unit) {
-    Column(
-        Modifier.fillMaxSize().padding(32.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(title, style = MaterialTheme.typography.titleLarge)
-        Spacer(Modifier.height(8.dp))
-        Text(body, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (action != null) {
-            Spacer(Modifier.height(20.dp))
-            OutlinedButton(onClick = onAction) { Text(action) }
-        }
-    }
-}

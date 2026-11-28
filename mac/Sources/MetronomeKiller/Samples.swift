@@ -15,6 +15,9 @@ enum Samples {
     private static let files = [
         "stick_accent", "stick_normal", "cowbell_accent", "cowbell_normal", "bell_accent", "bell_normal",
         "hat_accent", "hat_normal", "hat_soft", "kick", "rim_accent", "rim_normal",
+        "wood_accent", "wood_normal", "wood_soft", "clave_accent", "clave_normal", "clave_soft",
+        "agogo_high", "agogo_low", "agogo_soft", "log_high", "log_low", "log_soft",
+        "triangle_accent", "triangle_normal", "clap_accent", "clap_normal", "clap_soft",
     ]
 
     /** Call once at launch, before the audio output first opens. A missing file falls back to the plain click. */

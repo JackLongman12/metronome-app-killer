@@ -369,27 +369,3 @@ internal fun BpmEntry(initial: Int, onDismiss: () -> Unit, onConfirm: (Int) -> U
         }
     }
 }
-
-@Composable
-private fun BpmDialog(initial: Int, onDismiss: () -> Unit, onConfirm: (Int) -> Unit) {
-    var text by remember { mutableStateOf(initial.toString()) }
-    val value = text.toIntOrNull()
-    val valid = value != null && value in MetronomeController.MIN_BPM..MetronomeController.MAX_BPM
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Set tempo") },
-        text = {
-            OutlinedTextField(
-                value = text,
-                onValueChange = { text = it.filter(Char::isDigit).take(3) },
-                label = { Text("BPM") },
-                singleLine = true,
-                isError = !valid,
-                supportingText = { Text("${MetronomeController.MIN_BPM} to ${MetronomeController.MAX_BPM}") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            )
-        },
-        confirmButton = { TextButton(onClick = { if (valid && value != null) onConfirm(value) }) { Text("Set") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    )
-}

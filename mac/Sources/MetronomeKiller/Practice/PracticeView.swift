@@ -94,12 +94,9 @@ private struct SpeedTrainerView: View {
             if on {
                 HStack(spacing: 8) {
                     Button { p.skipStep(-1) } label: { Text("− step").frame(maxWidth: .infinity) }
-                        .keyboardShortcut(.leftArrow, modifiers: [])
                     Button { p.setHeld(!p.held) } label: { Text(p.held ? "Carry on" : "Hold").frame(maxWidth: .infinity) }
                         .tint(p.held ? .mkTealDark : nil).buttonStyle(.borderedProminent)
-                        .keyboardShortcut("h", modifiers: [])
                     Button { p.skipStep(1) } label: { Text("+ step").frame(maxWidth: .infinity) }
-                        .keyboardShortcut(.rightArrow, modifiers: [])
                 }
                 .controlSize(.large).disabled(!live)
                 .help("← and → skip a step, H holds the tempo")
