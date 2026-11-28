@@ -45,7 +45,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.metronomekiller.app.engine.MetronomeController
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import com.metronomekiller.app.engine.Subdivision
 import com.metronomekiller.app.metronome.BeatEditor
+import com.metronomekiller.app.metronome.BpmEntry
+import com.metronomekiller.app.metronome.SoundSheet
+import com.metronomekiller.app.metronome.TimeSignatureSheet
+import com.metronomekiller.app.metronome.subdivisionGlyph
 import com.metronomekiller.app.metronome.SquareButton
 import com.metronomekiller.app.ui.AppIcons
 import com.metronomekiller.app.ui.rememberTick
@@ -53,9 +60,9 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
- * Practice tab (approved design): speed trainer, gap click and timing check.
- * Everything plays through the normal metronome, so its meter, accents and
- * sound apply here too; the beat blocks at the top are the same ones.
+ * Practice tab (approved design): speed trainer, gap click, timing check,
+ * subdivision ladder and polyrhythm. Everything plays through the normal
+ * metronome; the tiles and beat blocks at the top edit its bar directly.
  */
 @Composable
 fun PracticeScreen(practice: PracticeController, metronome: MetronomeController, onPlay: () -> Unit) {
@@ -80,6 +87,8 @@ fun PracticeScreen(practice: PracticeController, metronome: MetronomeController,
             tool,
         ) { practice.setTool(it); tick() }
         Spacer(Modifier.height(12.dp))
+        BarSetup(tool, metronome, tick)
+        Spacer(Modifier.height(10.dp))
         BeatEditor(
             beats = state.beats, lastFraction = state.meter.lastBeatFraction.toFloat(),
             current = if (running != null) current else -1,
@@ -103,10 +112,71 @@ fun PracticeScreen(practice: PracticeController, metronome: MetronomeController,
             }
             Spacer(Modifier.width(14.dp))
             Text(
-                "${state.meter.label} · ${state.sound.label}. Uses the metronome's meter, accents and sound.",
+                "Tap a beat to change its accent. Changes here also change the Metronome tab.",
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+}
+
+// ── Bar setup: meter, subdivision, sound, tempo ─────────────────────────────
+
+/**
+ * Four tiles that open the same pickers as the Metronome tab, so you can set
+ * up the bar without leaving Practice.
+ *
+ * LEARN: there's only ONE metronome state (MetronomeController.state). Both
+ * tabs read and change it, so a change here shows up on the Metronome tab
+ * too; nothing has to be copied between them.
+ *
+ * Some tiles step aside when the tool controls that setting itself: the speed
+ * trainer sets the tempo (its From/To), the ladder steps through subdivisions.
+ */
+@Composable
+private fun BarSetup(tool: PracticeController.Tool, metronome: MetronomeController, tick: () -> Unit) {
+    val s by metronome.state.collectAsStateWithLifecycle()
+    var editSig by remember { mutableStateOf(false) }
+    var pickSound by remember { mutableStateOf(false) }
+    var editBpm by remember { mutableStateOf(false) }
+    var pickSub by remember { mutableStateOf(false) }
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        SetupTile(s.meter.label, "meter", Modifier.weight(1f)) { editSig = true; tick() }
+        if (tool != PracticeController.Tool.LADDER) Box(Modifier.weight(1f)) {
+            SetupTile(subdivisionGlyph(s.subdivision), s.subdivision.label.lowercase(), Modifier.fillMaxWidth()) { pickSub = true; tick() }
+            DropdownMenu(expanded = pickSub, onDismissRequest = { pickSub = false }) {
+                Subdivision.entries.forEach { sub ->
+                    DropdownMenuItem(
+                        text = { Text("${subdivisionGlyph(sub)}   ${sub.label}") },
+                        onClick = { metronome.setSubdivision(sub); pickSub = false },
+                    )
+                }
+            }
+        }
+        SetupTile(s.sound.label, "sound", Modifier.weight(1f), small = true) { pickSound = true; tick() }
+        if (tool != PracticeController.Tool.SPEED) SetupTile("${s.bpm}", "BPM", Modifier.weight(1f)) { editBpm = true; tick() }
+    }
+    if (editSig) TimeSignatureSheet(initial = s.meter, currentPattern = s.beats, onDismiss = { editSig = false }) { meter, pattern ->
+        metronome.setTimeSignature(meter, pattern); editSig = false
+    }
+    if (pickSound) SoundSheet(
+        selected = s.sound,
+        onSelect = { metronome.setSound(it); metronome.preview(it) },
+        onDismiss = { pickSound = false },
+    )
+    if (editBpm) BpmEntry(s.bpm, onDismiss = { editBpm = false }) { metronome.setBpm(it); editBpm = false }
+}
+
+@Composable
+private fun SetupTile(value: String, label: String, modifier: Modifier, small: Boolean = false, onClick: () -> Unit) {
+    val c = MaterialTheme.colorScheme
+    Column(
+        modifier.clip(RoundedCornerShape(10.dp)).border(1.5.dp, c.primary, RoundedCornerShape(10.dp))
+            .clickable(onClick = onClick).padding(vertical = 7.dp, horizontal = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(value, fontSize = if (small || value.length > 5) 13.sp else 18.sp, fontWeight = FontWeight.Medium,
+            maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, lineHeight = 22.sp)
+        Text(label, style = MaterialTheme.typography.labelSmall, color = c.onSurfaceVariant, maxLines = 1)
     }
 }
 

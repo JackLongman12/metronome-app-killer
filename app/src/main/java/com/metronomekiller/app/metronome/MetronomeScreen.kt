@@ -204,7 +204,8 @@ fun MetronomeScreen(
     )
 }
 
-private fun subdivisionGlyph(s: Subdivision) = when (s) {
+/** Note symbol for a subdivision (also used by the Practice tab). */
+internal fun subdivisionGlyph(s: Subdivision) = when (s) {
     Subdivision.QUARTERS -> "♩"
     Subdivision.EIGHTHS -> "♫"
     Subdivision.TRIPLETS -> "³"
@@ -319,7 +320,7 @@ private fun SheetToggle(title: String, checked: Boolean, onChange: (Boolean) -> 
  * hidden because we don't apply a password visual transformation.
  */
 @Composable
-private fun BpmEntry(initial: Int, onDismiss: () -> Unit, onConfirm: (Int) -> Unit) {
+internal fun BpmEntry(initial: Int, onDismiss: () -> Unit, onConfirm: (Int) -> Unit) {
     val c = MaterialTheme.colorScheme
     var value by remember {
         val t = initial.toString()
