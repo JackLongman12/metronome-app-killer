@@ -17,7 +17,7 @@ enum Uninstaller {
         let existing = AppFiles.everything.filter { FileManager.default.fileExists(atPath: $0.path) }
         let size = ([AppFiles.appBundle] + existing).reduce(Int64(0)) { $0 + folderSize($1) }
         let mb = ByteCountFormatter.string(fromByteCount: size, countStyle: .file)
-        return "This removes the app, your settings, songs, setlists and downloaded tools (\(mb) in total). It can't be undone."
+        return "This removes the app, your settings, setlists and practice history (\(mb) in total). It can't be undone."
     }
 
     @MainActor

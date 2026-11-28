@@ -44,29 +44,6 @@ class AppPrefs(context: Context) {
     val hapticTicks: StateFlow<Boolean> = _hapticTicks
     fun setHapticTicks(on: Boolean) { _hapticTicks.value = on; prefs.edit { putBoolean("haptic_ticks", on) } }
 
-    /** Song screen mix: song volume 0..1 and click volume 0..2. */
-    private val _songLevel = MutableStateFlow(prefs.getFloat("song_level", 1f))
-    val songLevel: StateFlow<Float> = _songLevel
-    fun setSongLevel(v: Float) { _songLevel.value = v; prefs.edit { putFloat("song_level", v) } }
-    private val _songClickLevel = MutableStateFlow(prefs.getFloat("song_click_level", 1f))
-    val songClickLevel: StateFlow<Float> = _songClickLevel
-    fun setSongClickLevel(v: Float) { _songClickLevel.value = v; prefs.edit { putFloat("song_click_level", v) } }
-
-    /** Use Songsterr tabs for tempo maps when a song has one (sends title/artist to Songsterr). */
-    private val _songsterr = MutableStateFlow(prefs.getBoolean("songsterr", true))
-    val songsterr: StateFlow<Boolean> = _songsterr
-    fun setSongsterr(on: Boolean) { _songsterr.value = on; prefs.edit { putBoolean("songsterr", on) } }
-
-    /** Beat model for song analysis: true = Masked-Diffusion ("Accurate"), false = beat_this ("Fast"). */
-    private val _accurateModel = MutableStateFlow(prefs.getBoolean("accurate_model", true))
-    val accurateModel: StateFlow<Boolean> = _accurateModel
-    fun setAccurateModel(on: Boolean) { _accurateModel.value = on; prefs.edit { putBoolean("accurate_model", on) } }
-
-    /** Song screen bars layout: true = part rows (one row per part), false = the bar grid. */
-    private val _partRows = MutableStateFlow(prefs.getBoolean("part_rows", true))
-    val partRows: StateFlow<Boolean> = _partRows
-    fun setPartRows(on: Boolean) { _partRows.value = on; prefs.edit { putBoolean("part_rows", on) } }
-
     private val _vibrate = MutableStateFlow(prefs.getBoolean("vibrate", false))
     val vibrate: StateFlow<Boolean> = _vibrate
     fun setVibrate(on: Boolean) { _vibrate.value = on; prefs.edit { putBoolean("vibrate", on) } }

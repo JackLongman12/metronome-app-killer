@@ -1,5 +1,3 @@
-import AudioToolbox
-import AVFoundation
 import ClickCore
 import CoreAudio
 import SwiftUI
@@ -66,22 +64,6 @@ final class AudioOutput: ObservableObject {
         if !uid.isEmpty && chosen == nil { refresh() }
         let d = chosen
         mk_set_output(d?.id ?? 0, Int32(d == nil ? 0 : min(channel, max((d?.channels ?? 2) - 1, 0))))
-    }
-
-    /**
-     * Songs play through the same device. LEARN: AVAudioEngine's output is a
-     * CoreAudio unit too; we point it at the device before the engine starts.
-     */
-    func applyTo(_ engine: AVAudioEngine) {
-        guard let d = chosen, let unit = engine.outputNode.audioUnit else { return }
-        var id = d.id
-        AudioUnitSetProperty(unit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0, &id, UInt32(MemoryLayout<AudioDeviceID>.size))
-    }
-
-    struct ChannelPair: Identifiable, Hashable {
-        let first: Int
-        let label: String
-        var id: Int { first }
     }
 
     /** "Channels 1–2", "Channels 3–4"… for a device with [n] outputs. */

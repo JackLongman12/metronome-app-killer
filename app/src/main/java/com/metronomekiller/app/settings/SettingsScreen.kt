@@ -61,8 +61,6 @@ fun SettingsScreen(
     val vibrate by controller.prefs.vibrate.collectAsStateWithLifecycle()
     val accentsOnly by controller.prefs.flashAccentsOnly.collectAsStateWithLifecycle()
     val hapticTicks by controller.prefs.hapticTicks.collectAsStateWithLifecycle()
-    val songsterr by controller.prefs.songsterr.collectAsStateWithLifecycle()
-    val accurate by controller.prefs.accurateModel.collectAsStateWithLifecycle()
     val volume by controller.prefs.volume.collectAsStateWithLifecycle()
     val colors by controller.prefs.colors.collectAsStateWithLifecycle()
     val route by controller.route.collectAsStateWithLifecycle()
@@ -113,18 +111,6 @@ fun SettingsScreen(
         Toggle("Vibrate", "Feel the beat, accents are stronger", vibrate, controller.prefs::setVibrate)
         Toggle("Haptic ticks", "A small click per step when turning the knob or sliders", hapticTicks, controller.prefs::setHapticTicks)
         Item("Audio sync", "${route.label} · ${controller.prefs.latencyMs(route.key)} ms. Line up visuals with Bluetooth delay", onOpenCalibration)
-
-        HorizontalDivider(Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
-        SectionLabel("Songs")
-        Choice("Accurate beat model", "Masked-Diffusion: best on our benchmark (tempo right 70 % vs 61 %), slower to analyse",
-            selected = accurate) { controller.prefs.setAccurateModel(true) }
-        Choice("Fast beat model", "beat_this: quicker, a little less reliable on complex songs",
-            selected = !accurate) { controller.prefs.setAccurateModel(false) }
-        Toggle(
-            "Use Songsterr tabs",
-            "When a song has a synced tab, use its bar-by-bar tempo map instead of the AI's. Sends the song title and artist to Songsterr.",
-            songsterr, controller.prefs::setSongsterr,
-        )
 
         HorizontalDivider(Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
         SectionLabel("Updates")

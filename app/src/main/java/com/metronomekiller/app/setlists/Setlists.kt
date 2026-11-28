@@ -13,16 +13,13 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-/**
- * One entry in a setlist: either saved metronome settings ("Intro click,
- * 132 BPM, 7/8") or a song from the Songs tab (played with its tempo map).
- */
+/** One entry in a setlist: saved metronome settings ("Intro click, 132 BPM, 7/8"). */
 sealed interface SetItem {
     val id: String
     val name: String
+    val settings: MetronomeState
 
-    data class Preset(override val id: String, override val name: String, val settings: MetronomeState) : SetItem
-    data class Song(override val id: String, override val name: String, val songId: String) : SetItem
+    data class Preset(override val id: String, override val name: String, override val settings: MetronomeState) : SetItem
 }
 
 data class Setlist(val id: String, val name: String, val items: List<SetItem>)
@@ -60,9 +57,6 @@ class SetlistStore(private val file: File) {
     fun addPreset(id: String, name: String, settings: MetronomeState) =
         edit(id) { it.copy(items = it.items + SetItem.Preset(UUID.randomUUID().toString(), name, settings.copy(playing = false))) }
 
-    fun addSong(id: String, songId: String, title: String) =
-        edit(id) { it.copy(items = it.items + SetItem.Song(UUID.randomUUID().toString(), title, songId)) }
-
     /** Replace a preset's settings (keeps its name and place). */
     fun updatePreset(id: String, itemId: String, settings: MetronomeState) = edit(id) { s ->
         s.copy(items = s.items.map { if (it is SetItem.Preset && it.id == itemId) it.copy(settings = settings.copy(playing = false)) else it })
@@ -71,7 +65,7 @@ class SetlistStore(private val file: File) {
     fun renameItem(id: String, itemId: String, name: String) = edit(id) { s ->
         s.copy(items = s.items.map {
             if (it.id != itemId || name.isBlank()) it
-            else when (it) { is SetItem.Preset -> it.copy(name = name); is SetItem.Song -> it.copy(name = name) }
+            else when (it) { is SetItem.Preset -> it.copy(name = name) }
         })
     }
 
@@ -94,13 +88,19 @@ class SetlistStore(private val file: File) {
         runCatching { file.writeText(toJson(_lists.value).toString()) }
     }
 
-    private fun load(): List<Setlist> = runCatching { fromJson(JSONArray(file.readText())) }.getOrDefault(emptyList())
+    private fun load(): List<Setlist> = runCatching {
+        val text = file.readText()
+        val lists = fromJson(JSONArray(text))
+        // Songs were removed from the app (build 28): setlists saved before then may
+        // still list songs. They were dropped while loading; save so they're gone for good.
+        if (text.contains("\"type\":\"song\"")) file.writeText(toJson(lists).toString())
+        lists
+    }.getOrDefault(emptyList())
 
     companion object {
         fun toJson(lists: List<Setlist>) = JSONArray(lists.map { s ->
             JSONObject().put("id", s.id).put("name", s.name).put("items", JSONArray(s.items.map { item ->
                 when (item) {
-                    is SetItem.Song -> JSONObject().put("type", "song").put("id", item.id).put("name", item.name).put("song", item.songId)
                     is SetItem.Preset -> JSONObject().put("type", "preset").put("id", item.id).put("name", item.name)
                         .put("bpm", item.settings.bpm)
                         .put("num", item.settings.meter.numerator).put("den", item.settings.meter.denominator)
@@ -113,10 +113,9 @@ class SetlistStore(private val file: File) {
         fun fromJson(a: JSONArray): List<Setlist> = List(a.length()) { i ->
             val o = a.getJSONObject(i)
             val items = o.getJSONArray("items")
-            Setlist(o.getString("id"), o.getString("name"), List(items.length()) { k ->
-                val it = items.getJSONObject(k)
-                if (it.getString("type") == "song") SetItem.Song(it.getString("id"), it.getString("name"), it.getString("song"))
-                else {
+            Setlist(o.getString("id"), o.getString("name"), (0 until items.length()).map { items.getJSONObject(it) }
+                .filter { it.getString("type") != "song" }.map {
+                run {
                     val beats = it.getJSONArray("beats").let { b -> List(b.length()) { n -> BeatState.valueOf(b.getString(n)) } }
                     SetItem.Preset(it.getString("id"), it.getString("name"), MetronomeState(
                         bpm = it.getInt("bpm"),

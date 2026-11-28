@@ -91,7 +91,6 @@ import kotlin.math.roundToInt
 fun MetronomeScreen(
     controller: MetronomeController,
     onTogglePlay: () -> Unit,
-    onLoadSong: () -> Unit,
     onComingSoon: (String) -> Unit,
 ) {
     val s by controller.state.collectAsStateWithLifecycle()
@@ -106,8 +105,6 @@ fun MetronomeScreen(
 
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
         Spacer(Modifier.height(12.dp))
-        CreateLoadSwitch(onLoad = onLoadSong)
-
         Spacer(Modifier.height(24.dp))
         BeatEditor(
             beats = s.beats,
@@ -212,31 +209,6 @@ private fun subdivisionGlyph(s: Subdivision) = when (s) {
     Subdivision.EIGHTHS -> "♫"
     Subdivision.TRIPLETS -> "³"
     Subdivision.SIXTEENTHS -> "♬"
-}
-
-/** Segmented switch: Create (this screen) / Load (pick a song). */
-@Composable
-private fun CreateLoadSwitch(onLoad: () -> Unit) {
-    val c = MaterialTheme.colorScheme
-    val comic = isComic()
-    val track = if (comic) Modifier.comicPanel(RoundedCornerShape(6.dp))
-    else Modifier.clip(RoundedCornerShape(12.dp)).background(c.ink.copy(alpha = 0.45f)).padding(3.dp)
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 40.dp)
-            .height(44.dp)
-            .then(track)
-    ) {
-        Box(
-            Modifier.weight(1f).fillMaxSize().clip(RoundedCornerShape(10.dp)).background(c.ink),
-            contentAlignment = Alignment.Center,
-        ) { Text("Create", style = MaterialTheme.typography.titleMedium, color = Color.White) }
-        Box(
-            Modifier.weight(1f).fillMaxSize().clip(RoundedCornerShape(10.dp)).clickable(onClick = onLoad),
-            contentAlignment = Alignment.Center,
-        ) { Text("Load", style = MaterialTheme.typography.titleMedium, color = if (comic) Color.Black else c.onSurfaceVariant) }
-    }
 }
 
 /** Our own wordmark where the reference app shows its logo. */

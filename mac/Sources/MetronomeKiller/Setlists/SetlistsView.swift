@@ -1,7 +1,7 @@
 import SwiftUI
 
 /**
- * Setlists: tempos and songs in the order you play them. Shows the list of
+ * Setlists: tempos and time signatures in the order you play them. Shows the list of
  * setlists, or one setlist when it's open. A port of SetlistsScreen.kt.
  */
 struct SetlistsView: View {
@@ -20,24 +20,16 @@ struct SetlistsView: View {
 private struct SetlistList: View {
     let onOpen: (String) -> Void
     @EnvironmentObject private var store: SetlistStore
-    @EnvironmentObject private var library: SongLibrary
     @State private var naming = false
 
     var body: some View {
-        let playlists = Array(Set(library.songs.compactMap(\.playlist))).sorted()
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("Setlists").font(.title2.weight(.semibold))
                 Spacer()
-                if !playlists.isEmpty {
-                    Menu("From a playlist") {
-                        ForEach(playlists, id: \.self) { name in Button(name) { fromPlaylist(name) } }
-                    }
-                    .fixedSize()
-                }
                 Button("New setlist") { naming = true }.buttonStyle(.borderedProminent).tint(.mkTealDark)
             }
-            Text("Mix saved metronome settings and songs, in playing order. On stage, Next (or Page Down, ⌘], a MIDI pedal) jumps straight to the next one.")
+            Text("Saved metronome settings, in playing order. On stage, Next (or Page Down, ⌘], a MIDI pedal) jumps straight to the next one.")
                 .font(.callout).foregroundStyle(.secondary)
             if store.lists.isEmpty {
                 VStack(spacing: 6) {
@@ -72,23 +64,17 @@ private struct SetlistList: View {
         }
     }
 
-    private func fromPlaylist(_ name: String) {
-        // The library lists newest first; playlist songs were added in order.
-        let items = library.songs.filter { $0.playlist == name }.reversed().map { SetItem(name: $0.title, kind: .song($0.id)) }
-        onOpen(store.create(name, items: Array(items)))
-    }
+
 }
 
 private struct SetlistDetail: View {
     let list: Setlist
     let onBack: () -> Void
     @EnvironmentObject private var store: SetlistStore
-    @EnvironmentObject private var library: SongLibrary
     @EnvironmentObject private var m: Metronome
     @EnvironmentObject private var app: AppState
     @State private var renaming = false
     @State private var addingPreset = false
-    @State private var addingSong = false
     @State private var renamingItem: SetItem?
     @State private var confirmDelete = false
 
@@ -110,7 +96,7 @@ private struct SetlistDetail: View {
                 }
             }
             if list.items.isEmpty {
-                Text("Add your first item: the metronome as it's set right now, or a song you've added.")
+                Text("Add your first item: the metronome as it's set right now.")
                     .foregroundStyle(.secondary).padding(.vertical, 20)
                 Spacer()
             } else {
@@ -125,7 +111,6 @@ private struct SetlistDetail: View {
             }
             HStack {
                 Button("+ Metronome as it's set now") { addingPreset = true }
-                Button("+ Song") { addingSong = true }
             }
         }
         .padding(20)
@@ -143,11 +128,10 @@ private struct SetlistDetail: View {
                 store.addPreset(list.id, name: $0.isEmpty ? SetlistStore.describe(s) : $0, settings: s)
             }
         }
-        .sheet(isPresented: $addingSong) { SongPicker { store.addSong(list.id, songId: $0.id, title: $0.title) } }
         .alert("Delete \"\(list.name)\"?", isPresented: $confirmDelete) {
             Button("Delete", role: .destructive) { store.delete(list.id); onBack() }
             Button("Cancel", role: .cancel) {}
-        } message: { Text("The setlist goes away; your songs and settings stay.") }
+        } message: { Text("The setlist goes away; your metronome settings stay.") }
     }
 
     private func row(_ i: Int, _ item: SetItem) -> some View {
@@ -156,7 +140,7 @@ private struct SetlistDetail: View {
             Text("\(i + 1)").font(.headline).monospacedDigit().foregroundStyle(current ? Color.mkTealDark : .secondary).frame(width: 28)
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.name).lineLimit(1)
-                Text(detail(item)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                Text("Metronome · " + SetlistStore.describe(item.settings)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer()
             Button("Play") { app.playSetItem(list.id, i) }.buttonStyle(.borderless)
@@ -167,53 +151,14 @@ private struct SetlistDetail: View {
         .onTapGesture(count: 2) { app.playSetItem(list.id, i) }
         .contextMenu {
             Button("Play") { app.playSetItem(list.id, i) }
-            if case .preset = item.kind {
-                Button("Update to the current metronome") { store.updatePreset(list.id, item: item.id, settings: m.settings) }
-            }
+            Button("Update to the current metronome") { store.updatePreset(list.id, item: item.id, settings: m.settings) }
             Button("Rename…") { renamingItem = item }
             Divider()
             Button("Remove", role: .destructive) { store.removeItem(list.id, item: item.id) }
         }
     }
 
-    private func detail(_ item: SetItem) -> String {
-        switch item.kind {
-        case .preset(let s): return "Metronome · " + SetlistStore.describe(s)
-        case .song(let id):
-            guard let song = library.song(id) else { return "Song · removed from your library" }
-            guard let map = song.map else { return "Song · still analysing" }
-            return "Song · \(Int(map.mainBpm.rounded())) BPM" + (song.usingTab ? " · tab" : "")
-        }
-    }
-}
 
-/** Pick a song from the library. */
-private struct SongPicker: View {
-    let onPick: (Song) -> Void
-    @EnvironmentObject private var library: SongLibrary
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Add a song").font(.headline)
-            if library.songs.isEmpty {
-                Text("Add songs on the Songs page first.").foregroundStyle(.secondary)
-            }
-            List(library.songs) { s in
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(s.title).lineLimit(1)
-                    Text([s.artist, s.map.map { "\(Int($0.mainBpm.rounded())) BPM" }].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-                .contentShape(Rectangle())
-                .onTapGesture { onPick(s); dismiss() }
-            }
-            .frame(height: 320)
-            HStack { Spacer(); Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction) }
-        }
-        .padding(20)
-        .frame(width: 420)
-    }
 }
 
 /** A small "type a name" sheet. */
@@ -246,7 +191,7 @@ struct NameSheet: View {
 }
 
 /**
- * Shown above the Metronome and Songs pages while you play through a setlist:
+ * Shown above the Metronome page while you play through a setlist:
  * where you are, and Previous / Next for quick changes on stage.
  */
 struct SetlistStrip: View {

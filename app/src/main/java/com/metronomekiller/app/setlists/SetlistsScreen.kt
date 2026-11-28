@@ -45,41 +45,35 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.metronomekiller.app.engine.MetronomeController
-import com.metronomekiller.app.songs.SongLibrary
 import com.metronomekiller.app.ui.AppIcons
 
 /**
- * Setlists: tempos and songs in the order you play them.
+ * Setlists: saved tempos and time signatures in the order you play them.
  * The list of setlists, or one setlist when it's open.
  *
  * [onPlay] loads item [index] of setlist [id] (the caller switches tabs).
  */
 @Composable
-fun SetlistsScreen(store: SetlistStore, library: SongLibrary, metronome: MetronomeController, onPlay: (String, Int) -> Unit) {
+fun SetlistsScreen(store: SetlistStore, metronome: MetronomeController, onPlay: (String, Int) -> Unit) {
     var openId by rememberSaveable { mutableStateOf<String?>(null) }
     val lists by store.lists.collectAsStateWithLifecycle()
     val open = openId?.let { id -> lists.firstOrNull { it.id == id } }
-    if (open != null) SetlistDetail(open, store, library, metronome, onBack = { openId = null }, onPlay = onPlay)
-    else SetlistList(lists, store, library, onOpen = { openId = it })
+    if (open != null) SetlistDetail(open, store, metronome, onBack = { openId = null }, onPlay = onPlay)
+    else SetlistList(lists, store, onOpen = { openId = it })
 }
 
 @Composable
-private fun SetlistList(lists: List<Setlist>, store: SetlistStore, library: SongLibrary, onOpen: (String) -> Unit) {
+private fun SetlistList(lists: List<Setlist>, store: SetlistStore, onOpen: (String) -> Unit) {
     var naming by remember { mutableStateOf(false) }
-    var fromPlaylist by remember { mutableStateOf(false) }
-    val songs by library.songs.collectAsStateWithLifecycle()
-    val playlists = remember(songs) { songs.mapNotNull { it.playlist }.distinct() }
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
         Spacer(Modifier.height(12.dp))
         Text("Setlists", style = MaterialTheme.typography.headlineSmall)
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { naming = true }, shape = RoundedCornerShape(10.dp), modifier = Modifier.weight(1f).height(48.dp)) { Text("+ New setlist") }
-            if (playlists.isNotEmpty()) OutlinedButton(onClick = { fromPlaylist = true }, shape = RoundedCornerShape(10.dp),
-                modifier = Modifier.weight(1f).height(48.dp)) { Text("From a playlist") }
         }
         Text(
-            "Mix saved metronome settings and songs, in playing order. On stage, Next jumps straight to the next one.",
+            "Saved metronome settings, in playing order. On stage, Next jumps straight to the next one.",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 6.dp, bottom = 8.dp),
         )
@@ -98,39 +92,16 @@ private fun SetlistList(lists: List<Setlist>, store: SetlistStore, library: Song
         }
     }
     if (naming) NameDialog("New setlist", "", "Friday gig") { name -> naming = false; name?.let { onOpen(store.create(it)) } }
-    if (fromPlaylist) PlaylistPicker(playlists, onDismiss = { fromPlaylist = false }) { name ->
-        fromPlaylist = false
-        val items = songs.filter { it.playlist == name }.reversed() // the library lists newest first; playlists were added in order
-            .map { SetItem.Song(java.util.UUID.randomUUID().toString(), it.title, it.id) }
-        onOpen(store.create(name, items))
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun PlaylistPicker(playlists: List<String>, onDismiss: () -> Unit, onPick: (String) -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
-            Text("Make a setlist from a playlist", style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(8.dp))
-            playlists.forEach { p ->
-                Text(p, style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.fillMaxWidth().clickable { onPick(p) }.padding(vertical = 14.dp))
-            }
-        }
-    }
 }
 
 @Composable
 private fun SetlistDetail(
-    list: Setlist, store: SetlistStore, library: SongLibrary, metronome: MetronomeController,
+    list: Setlist, store: SetlistStore, metronome: MetronomeController,
     onBack: () -> Unit, onPlay: (String, Int) -> Unit,
 ) {
     val active by store.active.collectAsStateWithLifecycle()
-    val songs by library.songs.collectAsStateWithLifecycle()
     var renaming by remember { mutableStateOf(false) }
     var addingPreset by remember { mutableStateOf(false) }
-    var addingSong by remember { mutableStateOf(false) }
     var renamingItem by remember { mutableStateOf<SetItem?>(null) }
     var confirmDelete by remember { mutableStateOf(false) }
     val c = MaterialTheme.colorScheme
@@ -156,12 +127,11 @@ private fun SetlistDetail(
 
         LazyColumn(Modifier.weight(1f)) {
             if (list.items.isEmpty()) item {
-                Text("Add your first item: the metronome as it's set right now, or a song you've added.",
+                Text("Add your first item: the metronome as it's set right now.",
                     color = c.onSurfaceVariant, modifier = Modifier.padding(vertical = 24.dp))
             }
             itemsIndexed(list.items, key = { _, it -> it.id }) { i, item ->
                 val isCurrent = active?.first == list.id && active?.second == i
-                val song = (item as? SetItem.Song)?.let { s -> songs.firstOrNull { it.id == s.songId } }
                 Row(
                     Modifier.fillMaxWidth().padding(vertical = 3.dp).clip(RoundedCornerShape(10.dp))
                         .background(if (isCurrent) c.primaryContainer else c.surfaceVariant.copy(alpha = 0.5f))
@@ -173,14 +143,7 @@ private fun SetlistDetail(
                     Column(Modifier.weight(1f)) {
                         Text(item.name, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(
-                            when (item) {
-                                is SetItem.Preset -> "Metronome · " + SetlistStore.describe(item.settings)
-                                is SetItem.Song -> when {
-                                    song == null -> "Song · removed from your library"
-                                    song.map == null -> "Song · still analysing"
-                                    else -> "Song · ${song.map.mainBpm.toInt()} BPM" + if (song.usingTab) " · tab" else ""
-                                }
-                            },
+                            "Metronome · " + SetlistStore.describe(item.settings),
                             style = MaterialTheme.typography.bodySmall, color = c.onSurfaceVariant, maxLines = 1,
                         )
                     }
@@ -204,9 +167,6 @@ private fun SetlistDetail(
             OutlinedButton(onClick = { addingPreset = true }, shape = RoundedCornerShape(10.dp), modifier = Modifier.weight(1f).height(48.dp)) {
                 Text("+ Metronome")
             }
-            OutlinedButton(onClick = { addingSong = true }, shape = RoundedCornerShape(10.dp), modifier = Modifier.weight(1f).height(48.dp)) {
-                Text("+ Song")
-            }
         }
     }
 
@@ -219,36 +179,13 @@ private fun SetlistDetail(
             note = SetlistStore.describe(s) + ". Set it up on the Metronome tab first, then add it here.",
         ) { n -> addingPreset = false; n?.let { store.addPreset(list.id, it.ifBlank { SetlistStore.describe(s) }, s) } }
     }
-    if (addingSong) SongPicker(library, onDismiss = { addingSong = false }) { song -> addingSong = false; store.addSong(list.id, song.id, song.title) }
     if (confirmDelete) AlertDialog(
         onDismissRequest = { confirmDelete = false },
         title = { Text("Delete \"${list.name}\"?") },
-        text = { Text("The setlist goes away; your songs and settings stay.") },
+        text = { Text("The setlist goes away; your metronome settings stay.") },
         confirmButton = { TextButton(onClick = { confirmDelete = false; store.delete(list.id); onBack() }) { Text("Delete") } },
         dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } },
     )
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun SongPicker(library: SongLibrary, onDismiss: () -> Unit, onPick: (com.metronomekiller.app.songs.Song) -> Unit) {
-    val songs by library.songs.collectAsStateWithLifecycle()
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp)) {
-            Text("Add a song", style = MaterialTheme.typography.titleMedium)
-            if (songs.isEmpty()) Text("Add songs on the Songs tab first.", color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(vertical = 16.dp))
-            LazyColumn(Modifier.heightIn(max = 420.dp)) {
-                itemsIndexed(songs, key = { _, s -> s.id }) { _, s ->
-                    Column(Modifier.fillMaxWidth().clickable { onPick(s) }.padding(vertical = 12.dp)) {
-                        Text(s.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(listOfNotNull(s.artist.ifBlank { null }, s.map?.let { "${it.mainBpm.toInt()} BPM" }).joinToString(" · "),
-                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-            }
-        }
-    }
 }
 
 /** A small "type a name" dialog; returns null on Cancel. */
@@ -271,7 +208,7 @@ private fun NameDialog(title: String, initial: String, placeholder: String, note
 }
 
 /**
- * Shown above the Metronome and Songs tabs while you play through a setlist:
+ * Shown above the Metronome tab while you play through a setlist:
  * where you are, and one-tap Previous / Next for quick changes on stage.
  */
 @Composable

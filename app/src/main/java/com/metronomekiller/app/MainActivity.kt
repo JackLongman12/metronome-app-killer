@@ -61,8 +61,6 @@ import com.metronomekiller.app.settings.SettingsScreen
 import com.metronomekiller.app.engine.BeatState
 import com.metronomekiller.app.ui.AppIcons
 import com.metronomekiller.app.ui.AppTheme
-import com.metronomekiller.app.songs.SongScreen
-import com.metronomekiller.app.songs.SongsScreen
 import com.metronomekiller.app.ui.isComic
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -77,7 +75,6 @@ import kotlinx.coroutines.launch
 
 private enum class Tab(val label: String, val icon: ImageVector) {
     METRONOME("Metronome", AppIcons.Metronome),
-    SONGS("Songs", AppIcons.Music),
     PRACTICE("Practice", AppIcons.Target),
     SETLISTS("Setlists", AppIcons.List),
     SETTINGS("Settings", AppIcons.Tune),
@@ -96,29 +93,7 @@ class MainActivity : ComponentActivity() {
     private val metronome get() = App.from(this).metronome
     private val updates: UpdateViewModel by viewModels()
 
-    /** Set when a link is shared to the app, so the UI can jump to the Songs tab. */
-    private val sharedLink = androidx.compose.runtime.mutableStateOf<String?>(null)
-
-    /**
-     * LEARN: when you tap Share → Metronome Killer in the YouTube app, Android starts
-     * (or brings back) this activity with an ACTION_SEND intent carrying the link
-     * as text. onCreate handles a cold start, onNewIntent a running app.
-     */
-    private fun handleShare(intent: android.content.Intent?) {
-        if (intent?.action != android.content.Intent.ACTION_SEND) return
-        val text = intent.getStringExtra(android.content.Intent.EXTRA_TEXT) ?: return
-        val url = com.metronomekiller.app.links.Links.findUrl(text) ?: return
-        App.from(this).songs.addLink(url)
-        sharedLink.value = url
-    }
-
-    override fun onNewIntent(intent: android.content.Intent) {
-        super.onNewIntent(intent)
-        handleShare(intent)
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
-        handleShare(intent)
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         // Make the phone's volume buttons control media (our click) volume,
@@ -155,11 +130,7 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun App() {
         var tab by rememberSaveable { mutableStateOf(Tab.METRONOME) }
-        // A link shared from YouTube: show it arriving in Songs.
-        val shared by sharedLink
-        LaunchedEffect(shared) { if (shared != null) { tab = Tab.SONGS; sharedLink.value = null } }
         var screen by rememberSaveable { mutableStateOf(Screen.MAIN) }
-        var openSong by rememberSaveable { mutableStateOf<String?>(null) } // id of the song being viewed
         val prefs = metronome.prefs
 
         // Android 13+ needs permission to show the "metronome is playing" notification.
@@ -219,7 +190,6 @@ class MainActivity : ComponentActivity() {
         BackHandler(enabled = screen != Screen.MAIN) {
             screen = Screen.MAIN
         }
-        BackHandler(enabled = screen == Screen.MAIN && tab == Tab.SONGS && openSong != null) { openSong = null }
 
         // Full-screen flash on each beat (optional). A flat tint that fades fast — no glow.
         val flashOn by prefs.flash.collectAsStateWithLifecycle()
@@ -256,27 +226,19 @@ class MainActivity : ComponentActivity() {
             },
         ) { padding ->
             Column(Modifier.fillMaxSize().padding(padding)) {
-                // LEARN: playing an item of a setlist loads it where it belongs: saved
-                // metronome settings go to the Metronome tab, songs open on the Songs tab.
+                // LEARN: playing an item of a setlist loads its saved settings into the
+                // metronome and shows the Metronome tab.
                 val playSetItem: (String, Int) -> Unit = { listId, index ->
                     setlists.get(listId)?.items?.getOrNull(index)?.let { item ->
                         setlists.setActive(listId, index)
-                        when (item) {
-                            is com.metronomekiller.app.setlists.SetItem.Preset -> {
-                                metronome.restore(item.settings); openSong = null; tab = Tab.METRONOME
-                            }
-                            is com.metronomekiller.app.setlists.SetItem.Song -> {
-                                val s = App.from(this@MainActivity).songs.song(item.songId)
-                                if (s?.map != null) { metronome.stop(); openSong = s.id; tab = Tab.SONGS }
-                                else say(if (s == null) "That song was removed from your library" else "That song is still being analysed")
-                            }
-                        }
+                        metronome.restore(item.settings)
+                        tab = Tab.METRONOME
                     }
                 }
                 val active by setlists.active.collectAsStateWithLifecycle()
                 val lists by setlists.lists.collectAsStateWithLifecycle()
                 val activeList = active?.let { (id, _) -> lists.firstOrNull { it.id == id } }
-                if (activeList != null && screen == Screen.MAIN && (tab == Tab.METRONOME || tab == Tab.SONGS)) {
+                if (activeList != null && screen == Screen.MAIN && tab == Tab.METRONOME) {
                     com.metronomekiller.app.setlists.SetlistStrip(
                         activeList, active!!.second,
                         onPrev = { playSetItem(activeList.id, active!!.second - 1) },
@@ -289,23 +251,12 @@ class MainActivity : ComponentActivity() {
                 } else when (tab) {
                     Tab.SETTINGS -> SettingsScreen(updates, metronome,
                         onOpenCalibration = { screen = Screen.CALIBRATION }, onBack = null)
-                    Tab.METRONOME -> MetronomeScreen(metronome, onTogglePlay = togglePlay,
-                        onLoadSong = { tab = Tab.SONGS }, onComingSoon = say)
-                    Tab.SONGS -> {
-                        val library = App.from(this@MainActivity).songs
-                        // LEARN: collect the list as state, so the song screen redraws whenever the
-                        // song changes (an edit, a rename, switching maps). Reading library.song(id)
-                        // once gave the screen a frozen copy, and edits looked like they did nothing.
-                        val songs by library.songs.collectAsStateWithLifecycle()
-                        val song = openSong?.let { id -> songs.firstOrNull { it.id == id } }
-                        if (song?.map != null) SongScreen(song, metronome, library, onBack = { openSong = null })
-                        else SongsScreen(library, onOpen = { openSong = it })
-                    }
+                    Tab.METRONOME -> MetronomeScreen(metronome, onTogglePlay = togglePlay, onComingSoon = say)
                     Tab.PRACTICE -> com.metronomekiller.app.practice.PracticeScreen(
                         App.from(this@MainActivity).practice, metronome, onPlay = askNotifications,
                     )
                     Tab.SETLISTS -> com.metronomekiller.app.setlists.SetlistsScreen(
-                        setlists, App.from(this@MainActivity).songs, metronome, onPlay = playSetItem,
+                        setlists, metronome, onPlay = playSetItem,
                     )
                 }
             }

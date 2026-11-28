@@ -11,10 +11,6 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        // JitPack builds libraries straight from GitHub; NewPipe Extractor is published there.
-        maven("https://jitpack.io") {
-            content { includeGroupByRegex("""com\.github\..*""") }
-        }
     }
 }
 

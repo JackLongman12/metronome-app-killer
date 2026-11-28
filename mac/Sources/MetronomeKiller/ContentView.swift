@@ -3,10 +3,10 @@ import SwiftUI
 /** The window: a sidebar with the four sections, and the chosen one on the right. */
 struct ContentView: View {
     enum Section: String, CaseIterable, Identifiable {
-        case metronome = "Metronome", songs = "Songs", practice = "Practice", setlists = "Setlists"
+        case metronome = "Metronome", practice = "Practice", setlists = "Setlists"
         var id: String { rawValue }
         var icon: String {
-            switch self { case .metronome: "metronome"; case .songs: "music.note.list"; case .practice: "target"; case .setlists: "list.bullet" }
+            switch self { case .metronome: "metronome"; case .practice: "target"; case .setlists: "list.bullet" }
         }
     }
 
@@ -23,7 +23,6 @@ struct ContentView: View {
                     Text("Space  start / stop")
                     Text("↑ ↓  tempo")
                     Text("T  tap")
-                    Text("← →  bars (songs)")
                     Text("PgDn PgUp  setlist")
                 }
                 .font(.caption)
@@ -34,10 +33,9 @@ struct ContentView: View {
         } detail: {
             VStack(spacing: 0) {
                 UpdateBanner()
-                if app.section == .metronome || app.section == .songs { SetlistStrip() }
+                if app.section == .metronome { SetlistStrip() }
                 switch app.section {
                 case .metronome: MetronomeView()
-                case .songs: SongsView()
                 case .practice: PracticeView()
                 case .setlists: SetlistsView()
                 }

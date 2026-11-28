@@ -16,27 +16,18 @@ After that it opens normally. It checks GitHub for a new version every time it o
 
 ## Uninstall
 
-**Metronome Killer menu → Uninstall Metronome Killer…** removes the app and everything it created: settings, songs, setlists, practice history, downloaded tools, caches, and the files macOS keeps for every app. The full list is in `Sources/MetronomeKiller/AppFiles.swift`.
+**Metronome Killer menu → Uninstall Metronome Killer…** removes the app and everything it created: settings, setlists, practice history, caches, and the files macOS keeps for every app. The full list is in `Sources/MetronomeKiller/AppFiles.swift`.
 
 ## What's here so far
 
 - The metronome: odd, decimal and irrational time signatures, accents, subdivisions, 14 sounds (6 recorded), tap tempo, and keyboard shortcuts (Space, ↑/↓, Shift+↑/↓, T).
-- Songs:
-  - Paste a YouTube, Spotify or Songsterr link (playlists too), or drop audio files on the window.
-  - The app finds every beat and bar, plays the song with a click locked to it, and reads part names from Songsterr tabs.
-  - Part rows or the full grid, looping a row, the Speed up loop, 50–100 % speed, song and click volume, timing nudge, and Edit mode.
-  - ← and → move by one bar.
-- Downloaded on first use, into the app's own folder (so Uninstall removes them):
-  - For analysis: ONNX Runtime (13 MB, MIT) and the beat model (28 MB).
-  - For links: yt-dlp (37 MB, updates itself) and QuickJS (1.4 MB), which yt-dlp needs for YouTube.
-  - YouTube audio is saved as AAC (.m4a), because macOS can't decode YouTube's Opus files without extra software.
 - Practice: speed trainer, gap click (with timing check), timing check, subdivision ladder and polyrhythm, plus a daily timer and history. On the tap pad, click or press T.
-- Setlists: metronome settings and songs in playing order. Next / Previous from the strip at the top, Page Down / Page Up, ⌘] / ⌘[, a MIDI pedal, or the ⏭ / ⏮ media keys.
+- Setlists: metronome settings in playing order. Next / Previous from the strip at the top, Page Down / Page Up, ⌘] / ⌘[, a MIDI pedal, or the ⏭ / ⏮ media keys.
 - Mac-only:
   - **Menu bar metronome**: start/stop, tempo and tap from the menu bar. It can keep running there with the window closed (Settings → Menu bar).
   - **MIDI** (Settings → MIDI): send MIDI clock so Logic, Ableton or GarageBand follow the metronome; follow another app's clock and start/stop; and Learn any pedal, pad or key to start/stop, tap, change tempo or step through a setlist.
   - **Audio output** (Settings → Audio): play through a chosen device, and put the click on any pair of an interface's outputs (e.g. 3–4 for headphones only).
-  - **Media keys, AirPods and Control Center**: play/pause, and ⏭ / ⏮ for the next setlist item or bar.
+  - **Media keys, AirPods and Control Center**: play/pause, and ⏭ / ⏮ for the next setlist item.
 - Self-update and clean uninstall.
 
 ## Building

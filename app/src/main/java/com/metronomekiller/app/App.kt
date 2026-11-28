@@ -2,7 +2,6 @@ package com.metronomekiller.app
 
 import android.app.Application
 import com.metronomekiller.app.engine.MetronomeController
-import com.metronomekiller.app.songs.SongLibrary
 
 /**
  * The Application object: created once, before any screen, and lives as long as
@@ -17,8 +16,6 @@ class App : Application() {
         private set
     lateinit var metronome: MetronomeController
         private set
-    lateinit var songs: SongLibrary
-        private set
     lateinit var setlists: com.metronomekiller.app.setlists.SetlistStore
         private set
     lateinit var practice: com.metronomekiller.app.practice.PracticeController
@@ -31,7 +28,7 @@ class App : Application() {
         // Recorded click sounds must reach the engine before its audio stream first opens.
         com.metronomekiller.app.engine.SampleLoader.load(this)
         metronome = MetronomeController(this, prefs)
-        songs = SongLibrary(this)
+        SongsRemoval.run(this)
         practice = com.metronomekiller.app.practice.PracticeController(this, metronome)
         setlists = com.metronomekiller.app.setlists.SetlistStore(java.io.File(filesDir, "setlists.json"))
     }

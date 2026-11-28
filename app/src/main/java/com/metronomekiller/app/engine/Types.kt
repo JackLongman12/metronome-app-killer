@@ -23,7 +23,7 @@ enum class BeatState(val level: Int) {
 
 /**
  * Click sounds. The first eight are made by maths in the engine ("synthesised");
- * the rest are recordings of a real drum kit ([recorded] = true).
+ * the rest are recordings of real instruments ([recorded] = true).
  * Order must match buildAll() in ClickEngine.cpp — only ever add new ones at the end,
  * because saved settings store the name and the engine uses the position.
  */
@@ -42,6 +42,12 @@ enum class ClickSound(val label: String, val recorded: Boolean = false) {
     REAL_HIHAT("Real hi-hat", true),
     REAL_KICK_HAT("Real kick and hat", true),
     REAL_RIMSHOT("Real rimshot", true),
+    REAL_WOODBLOCK("Real woodblock", true),
+    REAL_CLAVES("Real claves", true),
+    AGOGO("Agogo bells", true),
+    LOG_DRUM("Log drum", true),
+    TRIANGLE("Triangle", true),
+    CLAP("Hand clap", true),
 }
 
 enum class Subdivision(val perBeat: Int, val label: String) {

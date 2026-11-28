@@ -42,7 +42,6 @@ private struct AudioSettings: View {
                 Text("On an audio interface, put the click on the outputs that feed only your headphones (often 3–4), so it never goes to the speakers or the recording.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-            Text("Songs play through the same device, on its first two channels.").font(.caption).foregroundStyle(.secondary)
             if m.latencyMs > 0 {
                 Text(String(format: "Sound reaches the output %.1f ms after each beat is made.", m.latencyMs))
                     .font(.caption).foregroundStyle(.secondary)

@@ -14,7 +14,7 @@ enum AppFiles {
 
     private static var library: URL { FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library") }
 
-    /** Settings, songs, setlists and downloaded tools (like yt-dlp) live here. */
+    /** Settings, setlists and practice history live here. */
     static var support: URL {
         let u = library.appendingPathComponent("Application Support/\(bundleId)")
         try? FileManager.default.createDirectory(at: u, withIntermediateDirectories: true)

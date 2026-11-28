@@ -294,9 +294,9 @@ fun SoundSheet(
                 modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 8.dp),
             )
             // LEARN: a bottom sheet doesn't scroll by itself; verticalScroll lets the
-            // 14 sounds fit on small phones.
+            // 20 sounds fit on small phones.
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                listOf(false to "Electronic", true to "Recorded drum kit").forEach { (recorded, heading) ->
+                listOf(false to "Electronic", true to "Recorded").forEach { (recorded, heading) ->
                     Text(
                         heading,
                         style = MaterialTheme.typography.labelLarge,

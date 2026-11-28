@@ -1,6 +1,6 @@
 # Metronome Killer
 
-An ad-free Android metronome that can build a click track for a specific song. Give it a YouTube, SoundCloud or Spotify link, or a song on your phone, and it maps the song's tempo, including tempo changes, so the click follows the music.
+An ad-free metronome for Android and Mac, with practice tools and setlists.
 
 Hobby project, GPL-3.0, not on the Play Store. Install it from [Releases](../../releases/latest).
 
@@ -11,17 +11,14 @@ Hobby project, GPL-3.0, not on the Play Store. Install it from [Releases](../../
    - The first self-update asks you to allow installs from Metronome Killer.
    - On Android 12 and newer, later updates install without a confirmation prompt.
 
-## Status
+## What it does
 
-| Phase | What | State |
-|---|---|---|
-| 0 | Project setup, CI releases, in-app updater, basic click | Done |
-| 1 | Native Oboe engine, 8 sounds, background playback, beat editor, time signature/sound pickers, flash/vibration, Bluetooth sync | Done |
-| 2 | Beat-tracking prototype (beat_this), Songsterr benchmark, model comparison | Done |
-| 3 | Local songs → tempo map, parts/bars navigation, play-along with click | First version |
-| 4 | YouTube / SoundCloud (NewPipe Extractor), Spotify matching, share-to-app | Planned |
-| 5 | Speed trainer, gap click, A–B loop, slow-down, setlists, export | Planned |
-| 6 | Listen mode (live mic tracking) and timing feedback | Planned |
+- The metronome: odd, decimal and irrational time signatures, accents, subdivisions, recorded and synthesised sounds, tap tempo, flash and vibration, and a Bluetooth delay calibration.
+- Practice: speed trainer, gap click, timing check, subdivision ladder, polyrhythm, and a daily practice timer.
+- Setlists: saved metronome settings in playing order, with quick Next / Previous on stage.
+- A Mac version with the same engine, plus a menu bar metronome, MIDI clock and pedals: see [mac/README.md](mac/README.md).
+
+The Songs feature (click tracks from YouTube, Spotify or your own songs) was removed in Android build 28 and Mac build 13. Updating to those builds deletes everything it downloaded.
 
 ## How it's built
 
@@ -41,8 +38,7 @@ PlaybackService               keeps it running with the screen off (foreground s
 
 - `App.kt` creates the long-lived objects once when the app starts.
 - `update/` is the self-updater: it reads the latest GitHub Release and installs it.
-- `analysis/` turns a song into a tempo map: decode + resample, the beat model (ONNX Runtime, downloaded on first use), then `TempoMapBuilder` (a port of `tools/beat-lab/tempo_map.py`, checked by unit tests).
-- `songs/` is the song library, the Songs and Song screens, and `SongPlayer`, which mixes the click into the song's own audio so they never drift apart.
+- `practice/` and `setlists/` are the Practice and Setlists tabs.
 - `.github/workflows/build.yml` builds and signs the APK on every push, then publishes it.
 
 ## Building
@@ -57,11 +53,7 @@ Release builds in CI are signed with a key stored in repository secrets, so ever
 
 ## Credits
 
-- Beat tracking: [beat_this](https://github.com/CPJKU/beat_this) by CPJKU (MIT), the "Fast" model, and [Masked-Diffusion Beat This](https://github.com/fosfrancesco/md_beat_this) by Foscarin, Korzeniowski and Vogl (research / non-commercial licence), the "Accurate" model. Both are downloaded by the app on first use.
-
-- Recorded click sounds (side stick, cowbell, ride bell, hi-hat, kick, rimshot): the "GMRockKit" drum kit from [Hydrogen](https://github.com/hydrogen-music/hydrogen) (GPL-3.0), trimmed by `tools/sounds/prepare_samples.py`.
-
-- Song names from Spotify links are read from Spotify's public embed player; the audio itself comes from the matching YouTube upload.
+- Recorded click sounds: side stick, cowbell, ride bell, hi-hat, kick and rimshot from the "GMRockKit" drum kit from [Hydrogen](https://github.com/hydrogen-music/hydrogen) (GPL-3.0), and woodblock, claves, agogo bells, log drum, triangle and hand clap from [VCSL](https://github.com/sgossner/VCSL) (CC0), all trimmed by `tools/sounds/prepare_samples.py`.
 
 - Fonts in the Comic book theme: [Bangers](https://github.com/googlefonts/bangers) and [Comic Neue](https://github.com/crozynski/comicneue), both under the SIL Open Font License 1.1.
 

@@ -12,7 +12,7 @@ import java.nio.ByteOrder
  * so each sample is a signed number from −32768 to 32767, stored little-endian
  * (low byte first). We divide by 32768 to get the −1..1 floats the engine uses.
  *
- * The files come from Hydrogen's GPL-3.0 drum kit; tools/sounds/prepare_samples.py
+ * The files come from Hydrogen's GPL-3.0 drum kit and the CC0 VCSL library; tools/sounds/prepare_samples.py
  * trims them so each hit starts on its very first sample.
  */
 object SampleLoader {
@@ -20,6 +20,9 @@ object SampleLoader {
     private val SAMPLE_FILES = listOf(
         "stick_accent", "stick_normal", "cowbell_accent", "cowbell_normal", "bell_accent", "bell_normal",
         "hat_accent", "hat_normal", "hat_soft", "kick", "rim_accent", "rim_normal",
+        "wood_accent", "wood_normal", "wood_soft", "clave_accent", "clave_normal", "clave_soft",
+        "agogo_high", "agogo_low", "agogo_soft", "log_high", "log_low", "log_soft",
+        "triangle_accent", "triangle_normal", "clap_accent", "clap_normal", "clap_soft",
     )
 
     /** Call once at app start, before the audio stream opens. A file that fails just falls back to the plain click. */

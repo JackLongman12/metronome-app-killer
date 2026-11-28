@@ -85,17 +85,36 @@ Voice cowbell(int sr, double f1, double f2, float gain) {
 // Sample slots: must match the order of SAMPLE_FILES in Kotlin (SampleLoader.kt).
 enum {
     kStickAccent, kStickNormal, kCowbellAccent, kCowbellNormal, kBellAccent, kBellNormal,
-    kHatAccent, kHatNormal, kHatSoft, kKick, kRimAccent, kRimNormal, kSampleCount
+    kHatAccent, kHatNormal, kHatSoft, kKick, kRimAccent, kRimNormal,
+    kWoodAccent, kWoodNormal, kWoodSoft, kClaveAccent, kClaveNormal, kClaveSoft,
+    kAgogoHigh, kAgogoLow, kAgogoSoft, kLogHigh, kLogLow, kLogSoft,
+    kTriangleAccent, kTriangleNormal, kClapAccent, kClapNormal, kClapSoft, kSampleCount
 };
 
-// Converts a recorded hit to the output sample rate and normalises its peak to [gain].
+// Loudness of the first 30 ms of a voice (root-mean-square: the "average power").
+double rms30(const Voice& v, int sr) {
+    const size_t n = std::min(v.size(), static_cast<size_t>(sr * 0.03));
+    if (n == 0) return 0.0;
+    double sum = 0.0;
+    for (size_t i = 0; i < n; ++i) sum += static_cast<double>(v[i]) * v[i];
+    return std::sqrt(sum / n);
+}
+
+// Converts a recorded hit to the output sample rate and sets its loudness.
+//
+// LEARN — why not just normalise the peak like the synthesised sounds: a
+// recording's peak says little about how loud it SOUNDS. A hand clap is one
+// sharp spike and then almost nothing, so peak-normalised it sounds quiet; a
+// cowbell rings at full level, so it sounds loud. Ears follow the average
+// power over the first few tens of milliseconds, so we match that (to
+// [targetRms], taken from the plain Click) and only cap the peak at 1.0.
 //
 // LEARN — resampling: the recordings are 44.1 kHz but most phones play at 48 kHz.
 // Playing 44.1k samples at 48k would make them 9% shorter and higher-pitched,
 // so we compute each output sample by reading "between" two input samples
 // (linear interpolation). It's the simplest resampler; for short percussive
 // hits it sounds the same as fancy ones.
-Voice resample(const std::vector<float>& in, int inRate, int outRate, float gain) {
+Voice resample(const std::vector<float>& in, int inRate, int outRate, double targetRms) {
     if (in.empty() || inRate <= 0) return {};
     const double step = static_cast<double>(inRate) / outRate;
     const int n = static_cast<int>((in.size() - 1) / step);
@@ -108,7 +127,10 @@ Voice resample(const std::vector<float>& in, int inRate, int outRate, float gain
         out[i] = static_cast<float>(in[k] * (1.0 - frac) + in[k + 1] * frac);
         peak = std::max(peak, std::fabs(out[i]));
     }
-    if (peak > 0.0f) for (auto& x : out) x *= gain / peak;
+    const double loud = rms30(out, outRate);
+    if (peak <= 0.0f || loud <= 0.0) return out;
+    const double scale = std::min(targetRms / loud, 1.0 / peak);
+    for (auto& x : out) x = static_cast<float>(x * scale);
     return out;
 }
 
@@ -147,8 +169,9 @@ std::vector<std::array<Voice, 3>> buildAll(int sr, const std::vector<std::vector
 
     // Recorded sounds. If a sample is missing (assets failed to load), fall back
     // to the plain click so nothing goes silent.
+    const double clickRms = rms30(v[0][0], sr);  // the plain Click's accent = loudness reference
     auto smp = [&](int slot, float g) {
-        Voice r = slot < static_cast<int>(raw.size()) ? resample(raw[slot], rates[slot], sr, g) : Voice{};
+        Voice r = slot < static_cast<int>(raw.size()) ? resample(raw[slot], rates[slot], sr, clickRms * g) : Voice{};
         return r.empty() ? tone(1320, 22, g) : r;
     };
     v.push_back({smp(kStickAccent, 1.0f), smp(kStickNormal, 0.8f), smp(kStickNormal, 0.45f)});        // Side stick
@@ -157,6 +180,12 @@ std::vector<std::array<Voice, 3>> buildAll(int sr, const std::vector<std::vector
     v.push_back({smp(kHatAccent, 1.0f), smp(kHatNormal, 0.8f), smp(kHatSoft, 0.45f)});                // Hi-hat (recorded)
     v.push_back({smp(kKick, 1.0f), smp(kHatNormal, 0.8f), smp(kHatSoft, 0.45f)});                     // Kick and hat (recorded)
     v.push_back({smp(kRimAccent, 1.0f), smp(kRimNormal, 0.8f), smp(kRimNormal, 0.45f)});              // Rimshot (recorded)
+    v.push_back({smp(kWoodAccent, 1.0f), smp(kWoodNormal, 0.8f), smp(kWoodSoft, 0.45f)});             // Woodblock (recorded)
+    v.push_back({smp(kClaveAccent, 1.0f), smp(kClaveNormal, 0.8f), smp(kClaveSoft, 0.45f)});          // Claves (recorded)
+    v.push_back({smp(kAgogoHigh, 1.0f), smp(kAgogoLow, 0.8f), smp(kAgogoSoft, 0.45f)});               // Agogo: high bell on the 1
+    v.push_back({smp(kLogHigh, 1.0f), smp(kLogLow, 0.8f), smp(kLogSoft, 0.45f)});                     // Log drum: high on the 1
+    v.push_back({smp(kTriangleAccent, 1.0f), smp(kTriangleNormal, 0.8f), smp(kTriangleNormal, 0.45f)}); // Triangle
+    v.push_back({smp(kClapAccent, 1.0f), smp(kClapNormal, 0.8f), smp(kClapSoft, 0.45f)});             // Hand clap
     return v;
 }
 int64_t monotonicNowNs() {
@@ -181,7 +210,7 @@ void ClickEngine::setBeats(const int32_t* states, int count) {
 
 void ClickEngine::buildVoices(int sr) { voices_ = buildAll(sr, rawSamples_, rawRates_); }
 
-int ClickEngine::soundCount() { return 14; }
+int ClickEngine::soundCount() { return 20; }
 
 void ClickEngine::setSample(int slot, const float* data, int count, int rate) {
     if (slot < 0 || slot >= kSampleCount || count <= 1) return;

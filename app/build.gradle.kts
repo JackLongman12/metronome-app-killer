@@ -77,9 +77,6 @@ android {
     }
 
     compileOptions {
-        // "Desugaring" back-ports newer Java library features (java.nio.file, java.time...)
-        // to older Android versions. NewPipe Extractor needs it below Android 13.
-        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -102,10 +99,6 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.oboe)
-    implementation(libs.onnxruntime.android)   // runs the beat-tracking model on the phone
-    implementation(libs.media3.exoplayer)      // plays songs, with our click mixed in
-    implementation(libs.newpipe.extractor)     // YouTube / SoundCloud links (GPL-3.0, like this app)
-    coreLibraryDesugaring(libs.desugar.nio)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)

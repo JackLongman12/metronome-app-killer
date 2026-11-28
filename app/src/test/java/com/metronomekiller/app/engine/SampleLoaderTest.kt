@@ -9,7 +9,7 @@ class SampleLoaderTest {
     @Test fun shippedSoundsDecode() {
         val dir = listOf(File("src/main/assets/sounds"), File("app/src/main/assets/sounds")).first { it.isDirectory }
         val files = dir.listFiles { f -> f.extension == "wav" }!!
-        assertEquals(12, files.size)
+        assertEquals(29, files.size)
         files.forEach { f ->
             val (samples, rate) = SampleLoader.decodeWav(f.readBytes())
             assertEquals(44100, rate)

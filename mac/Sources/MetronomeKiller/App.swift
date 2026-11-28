@@ -15,7 +15,6 @@ struct MetronomeKillerApp: App {
     @StateObject private var metronome: Metronome
     @StateObject private var practice: Practice
     @StateObject private var updater = Updater()
-    @StateObject private var library = SongLibrary()
     @StateObject private var setlists = SetlistStore()
     @StateObject private var app = AppState()
     @AppStorage("menuBar") private var menuBar = true
@@ -34,7 +33,6 @@ struct MetronomeKillerApp: App {
                 .environmentObject(metronome)
                 .environmentObject(practice)
                 .environmentObject(updater)
-                .environmentObject(library)
                 .environmentObject(setlists)
                 .environmentObject(app)
                 .frame(minWidth: 680, minHeight: 500)
@@ -85,7 +83,8 @@ struct MetronomeKillerApp: App {
     }
 
     private func setUp() {
-        app.connect(metronome, practice, setlists, library)
+        SongsRemoval.run()                   // once: delete what the removed Songs feature left
+        app.connect(metronome, practice, setlists)
         _ = AudioOutput.shared               // point the engine at the chosen output
         NowPlaying.install(app)
         if Midi.shared.everUsed { Midi.shared.start(app) }   // no MIDI work at all until you use it
@@ -94,8 +93,7 @@ struct MetronomeKillerApp: App {
 }
 
 /**
- * Single-key shortcuts: Space start/stop (or play/pause the open song), ↑/↓
- * tempo (Shift: ±10), ←/→ previous/next bar on the song page, T tap tempo
+ * Single-key shortcuts: Space start/stop, ↑/↓ tempo (Shift: ±10), T tap tempo
  * (or a timing-check tap on Practice), Page Down / Page Up through a setlist.
  *
  * LEARN: a "local event monitor" sees every key press in our app before the
@@ -119,8 +117,6 @@ enum KeyShortcuts {
             case 49: if e.isARepeat { return nil }; app.togglePlay()          // Space
             case 126: m.nudge(shift ? 10 : 1)                                  // ↑
             case 125: m.nudge(shift ? -10 : -1)                                // ↓
-            case 123: if let p = app.songPage, app.section == .songs { p.jumpBars(-1) } else { return e }  // ←
-            case 124: if let p = app.songPage, app.section == .songs { p.jumpBars(1) } else { return e }   // →
             case 121: if app.setlistActive { app.stepSetlist(1) } else { return e }    // Page Down
             case 116: if app.setlistActive { app.stepSetlist(-1) } else { return e }   // Page Up
             case 17:                                                           // T

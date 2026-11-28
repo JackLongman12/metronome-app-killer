@@ -152,6 +152,11 @@ struct TimeSignaturePreset: Hashable, Identifiable {
     ]
 }
 
+extension Comparable {
+    /** The value kept between lo and hi: 5.clamped(1, 3) is 3. */
+    func clamped(_ lo: Self, _ hi: Self) -> Self { min(max(self, lo), hi) }
+}
+
 /** Everything that defines what the metronome plays. Saved between launches. */
 struct MetronomeSettings: Codable, Equatable {
     var bpm = 120
